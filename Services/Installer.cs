@@ -48,7 +48,13 @@ namespace DynamicIsland
                 if (IsInstalled) return;
                 string src = Norm(AppContext.BaseDirectory);
                 string dst = InstallDir;
-                CopyDir(src, dst);
+                // Version « fichier unique » : seul l'exe compte (ne jamais copier le dossier où il traîne, ex. Téléchargements).
+                if (File.Exists(Path.Combine(src, "Malbo.dll"))) CopyDir(src, dst);
+                else
+                {
+                    Directory.CreateDirectory(dst);
+                    File.Copy(Environment.ProcessPath, Path.Combine(dst, ExeName), true);
+                }
 
                 string exe = Path.Combine(dst, ExeName);
                 CreateShortcut(StartMenuLink, exe, dst);
@@ -171,10 +177,11 @@ namespace DynamicIsland
     {
         public Version Version;
         public string ZipUrl;
+        public string ExeUrl;
         public string Notes;
     }
 
-    /// <summary>Mises à jour via les releases GitHub (asset .zip de publish.ps1).</summary>
+    /// <summary>Mises à jour via les releases GitHub (asset Malbo.exe de publish.ps1, ou à défaut un .zip).</summary>
     public static class Updater
     {
         static readonly HttpClient Http = CreateClient();
@@ -218,28 +225,30 @@ namespace DynamicIsland
                 ver = Three(ver);
                 if (ver <= Current) return null;
 
-                string zip = null;
+                string zip = null, exe = null;
                 if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var a in assets.EnumerateArray())
                     {
                         string name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
-                        if (name == null || !name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
-                        zip = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
-                        if (zip != null) break;
+                        string url = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                        if (name == null || url == null) continue;
+                        if (exe == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe = url;
+                        else if (zip == null && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zip = url;
                     }
                 }
-                if (zip == null) return null;
+                if (zip == null && exe == null) return null;
 
                 string notes = root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : "";
-                return new UpdateInfo { Version = ver, ZipUrl = zip, Notes = notes };
+                return new UpdateInfo { Version = ver, ZipUrl = zip, ExeUrl = exe, Notes = notes };
             }
             catch { return null; }
         }
 
         public static async Task ApplyAsync(UpdateInfo u)
         {
-            if (u == null || string.IsNullOrEmpty(u.ZipUrl)) return;
+            if (u == null || (string.IsNullOrEmpty(u.ZipUrl) && string.IsNullOrEmpty(u.ExeUrl))) return;
+            if (!string.IsNullOrEmpty(u.ExeUrl)) { await ApplyExeAsync(u); return; }
             try
             {
                 string tmp = Path.GetTempPath();
@@ -275,6 +284,55 @@ namespace DynamicIsland
                 sb.Append($"xcopy \"{src}\\*\" \"{dst}\" /e /y /q /i >nul\r\n");
                 sb.Append($"start \"\" \"{dst}\\{ExeNameOf()}\"\r\n");
                 sb.Append($"rmdir /s /q \"{extractDir}\" >nul 2>&1\r\n");
+                sb.Append("(goto) 2>nul & del \"%~f0\"\r\n");
+                File.WriteAllText(bat, sb.ToString(), new UTF8Encoding(false));
+
+                Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{bat}\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                });
+
+                var app = Application.Current;
+                if (app != null) app.Dispatcher.Invoke(() => app.Shutdown());
+            }
+            catch (Exception ex)
+            {
+                App.Log(ex);
+                throw;
+            }
+        }
+
+        /// <summary>Mise à jour « fichier unique » : télécharge le nouvel exe et remplace l'actuel une fois Malbo fermé.</summary>
+        static async Task ApplyExeAsync(UpdateInfo u)
+        {
+            try
+            {
+                string tmp = Path.GetTempPath();
+                string newExe = Path.Combine(tmp, $"Malbo-update-{u.Version}.exe");
+                using (var resp = await Http.GetAsync(u.ExeUrl, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    resp.EnsureSuccessStatusCode();
+                    using var fs = new FileStream(newExe, FileMode.Create, FileAccess.Write, FileShare.None);
+                    await resp.Content.CopyToAsync(fs);
+                }
+
+                string target = Environment.ProcessPath;
+                int pid = Environment.ProcessId;
+                string bat = Path.Combine(tmp, "malbo_update.bat");
+                var sb = new StringBuilder();
+                sb.Append("@echo off\r\n");
+                sb.Append("chcp 65001 >nul\r\n");
+                sb.Append(":wait\r\n");
+                sb.Append($"tasklist /fi \"PID eq {pid}\" 2>nul | find \"{pid}\" >nul\r\n");
+                sb.Append("if not errorlevel 1 (\r\n  ping -n 2 127.0.0.1 >nul\r\n  goto wait\r\n)\r\n");
+                // Le gardien peut encore tenir l'exe quelques instants : on réessaie la copie.
+                sb.Append("set n=0\r\n:copy\r\n");
+                sb.Append($"copy /y \"{newExe}\" \"{target}\" >nul 2>&1\r\n");
+                sb.Append("if errorlevel 1 (\r\n  set /a n+=1\r\n  if %n% lss 15 (\r\n    ping -n 2 127.0.0.1 >nul\r\n    goto copy\r\n  )\r\n)\r\n");
+                sb.Append($"start \"\" \"{target}\"\r\n");
+                sb.Append($"del \"{newExe}\" >nul 2>&1\r\n");
                 sb.Append("(goto) 2>nul & del \"%~f0\"\r\n");
                 File.WriteAllText(bat, sb.ToString(), new UTF8Encoding(false));
 

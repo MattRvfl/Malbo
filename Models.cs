@@ -36,7 +36,22 @@ namespace DynamicIsland
     public class ClipItem
     {
         public string Text { get; set; }
+        /// <summary>Miniature affichée dans l'historique (quelques Ko au lieu de l'image pleine résolution).</summary>
         public BitmapSource Image { get; set; }
+        /// <summary>Image d'origine compressée en PNG : décodée seulement quand on la recopie / l'enregistre.</summary>
+        public byte[] Png { get; set; }
+        public int PixelWidth { get; set; }
+        public int PixelHeight { get; set; }
+
+        public BitmapSource LoadFull()
+        {
+            if (Png == null) return Image;
+            using var ms = new System.IO.MemoryStream(Png);
+            var bi = new BitmapImage();
+            bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.StreamSource = ms; bi.EndInit();
+            bi.Freeze();
+            return bi;
+        }
         public DateTime Time { get; set; }
         public string Preview => Image != null ? "Image" : (Text.Length > 160 ? Text.Substring(0, 160) + "…" : Text).Replace("\r", "").Trim();
         public string TimeText => Time.ToString("HH:mm");
@@ -59,9 +74,11 @@ namespace DynamicIsland
         public Visibility SubVis => string.IsNullOrEmpty(Sub) ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public class AppVolumeItem : Observable
+    public class AppVolumeItem : Observable, IDisposable
     {
         readonly NAudio.CoreAudioApi.AudioSessionControl _s;
+        public bool Owns(NAudio.CoreAudioApi.AudioSessionControl s) => ReferenceEquals(_s, s);
+        public void Dispose() { try { _s?.Dispose(); } catch { } }
         public uint Pid { get; }
         public string Name { get; }
         public ImageSource Icon { get; }
@@ -76,16 +93,22 @@ namespace DynamicIsland
 
     public static class IconHelper
     {
+        // Cache par exécutable : une icône par appli au lieu d'une nouvelle à chaque rafraîchissement.
+        static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ImageSource> Cache = new(StringComparer.OrdinalIgnoreCase);
+
         public static ImageSource FromFile(string path)
         {
             try
             {
                 if (string.IsNullOrEmpty(path)) return null;
                 if (System.IO.Directory.Exists(path)) path = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + "\\explorer.exe";
+                bool cacheable = path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+                if (cacheable && Cache.TryGetValue(path, out var hit)) return hit;
                 using var ico = System.Drawing.Icon.ExtractAssociatedIcon(path);
                 if (ico == null) return null;
                 var src = Imaging.CreateBitmapSourceFromHIcon(ico.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
                 src.Freeze();
+                if (cacheable) { if (Cache.Count > 128) Cache.Clear(); Cache[path] = src; }
                 return src;
             }
             catch { return null; }

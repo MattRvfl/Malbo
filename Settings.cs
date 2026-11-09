@@ -71,9 +71,12 @@ namespace DynamicIsland
         public bool FpsCounter { get; set; } = false;
         public string PresentMonPath { get; set; } = "";
 
-        // Mises à jour
-        public string UpdateRepo { get; set; } = "";
+        // Mises à jour (manifeste update.json du dépôt, sinon dernière release GitHub)
+        public const string DefaultRepo = "MattRvfl/Malbo";
+        public string UpdateRepo { get; set; } = DefaultRepo;
         public bool AutoUpdate { get; set; } = true;
+        /// <summary>Installe seule la mise à jour quand l'île est au repos (sinon : bouton « Installer »).</summary>
+        public bool AutoInstallUpdates { get; set; } = true;
 
         // Onglets
         public bool ShowMedia { get; set; } = true;
@@ -109,20 +112,34 @@ namespace DynamicIsland
                 var old = Path.Combine(OldDir, "settings.json");
                 if (!File.Exists(FilePath) && File.Exists(old)) { Directory.CreateDirectory(Dir); File.Copy(old, FilePath); }
                 if (File.Exists(FilePath))
-                    return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+                {
+                    var st = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+                    // anciens réglages sans dépôt : on branche les mises à jour sur le dépôt officiel
+                    if (string.IsNullOrWhiteSpace(st.UpdateRepo)) st.UpdateRepo = DefaultRepo;
+                    return st;
+                }
             }
             catch { }
             return new AppSettings();
         }
 
+        static readonly object SaveLock = new();
+        static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+
+        /// <summary>Écriture atomique (fichier temporaire puis remplacement) et protégée : Discord/Spotify sauvegardent depuis d'autres threads.</summary>
         public void Save()
         {
             try
             {
-                Directory.CreateDirectory(Dir);
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+                lock (SaveLock)
+                {
+                    Directory.CreateDirectory(Dir);
+                    var tmp = FilePath + ".tmp";
+                    File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOpts));
+                    File.Move(tmp, FilePath, true);
+                }
             }
-            catch { }
+            catch (Exception ex) { App.Log(ex); }
         }
     }
 }

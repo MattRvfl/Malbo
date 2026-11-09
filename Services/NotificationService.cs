@@ -105,11 +105,11 @@ namespace DynamicIsland
                 var r = n.AppInfo.DisplayInfo.GetLogo(new Windows.Foundation.Size(64, 64));
                 using var ras = await r.OpenReadAsync();
                 using var st = ras.AsStreamForRead();
-                var ms = new MemoryStream();
+                using var ms = new MemoryStream();
                 await st.CopyToAsync(ms);
                 ms.Position = 0;
                 var bi = new BitmapImage();
-                bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.StreamSource = ms; bi.EndInit();
+                bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.DecodePixelWidth = 64; bi.StreamSource = ms; bi.EndInit();
                 bi.Freeze();
                 bmp = bi;
             }

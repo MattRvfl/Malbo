@@ -21,6 +21,8 @@ namespace DynamicIsland
             {
                 try
                 {
+                    // Le gardien ne fait qu'attendre : on lui retire presque toute sa RAM (quelques Mo au lieu de ~40).
+                    Native.TrimMemory();
                     WaitPid(ArgInt(args, "--watchdog"), Timeout.Infinite);
                     Thread.Sleep(1500);
                     if (Mutex.TryOpenExisting("Malbo_SingleInstance", out var other))

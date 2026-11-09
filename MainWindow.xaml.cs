@@ -734,6 +734,21 @@ namespace DynamicIsland
         // ================== Ticks ==================
         readonly Random _rnd = new();
         readonly double[] _barH = new double[5];
+        static readonly double[] BarWeights = { 0.6, 0.95, 1.0, 0.8, 0.55 };
+        FrameworkElement[] _bars;
+        int _trimInFlight;
+
+        /// <summary>Au repos (île compacte, souris ailleurs), rend la RAM inutilisée au système.</summary>
+        void IdleTrim()
+        {
+            if (_mode != Mode.Compact || HitZone.IsMouseOver || _menuOpen) return;
+            if (System.Threading.Interlocked.Exchange(ref _trimInFlight, 1) == 1) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { Native.TrimMemory(); }
+                finally { System.Threading.Interlocked.Exchange(ref _trimInFlight, 0); }
+            });
+        }
 
         /// <summary>40 ms seulement quand c'est utile (barres visibles, onglet Média ouvert), arrêt complet si l'île est masquée.</summary>
         void UpdateFastTimer()
@@ -753,13 +768,13 @@ namespace DynamicIsland
             if (Bars.Visibility == Visibility.Visible && _mode == Mode.Compact && Root.Visibility == Visibility.Visible)
             {
                 var peak = Math.Min(1, _vol.Peak * 1.6);
-                var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4 };
-                double[] weights = { 0.6, 0.95, 1.0, 0.8, 0.55 };
+                var bars = _bars ??= new[] { Bar0, Bar1, Bar2, Bar3, Bar4 };
                 for (int i = 0; i < 5; i++)
                 {
-                    double target = 3 + peak * 15 * weights[i] * (0.55 + _rnd.NextDouble() * 0.45);
+                    double target = 3 + peak * 15 * BarWeights[i] * (0.55 + _rnd.NextDouble() * 0.45);
                     _barH[i] += (target - _barH[i]) * 0.45;
-                    bars[i].Height = Math.Max(3, _barH[i]);
+                    double h = Math.Max(3, _barH[i]);
+                    if (Math.Abs(bars[i].Height - h) > 0.25) bars[i].Height = h; // évite une passe de layout inutile
                 }
             }
             MediaTick();
@@ -811,6 +826,8 @@ namespace DynamicIsland
             if (_tickCount % 20 == 0) _vol.CheckDevice();  // toutes les 5 s : périphérique audio par défaut
             if (_tickCount % 60 == 0 && S.HideWindowsBanners && _notif.Ok) BannerService.Apply(S); // nouvelles applis
             if (_tickCount % 120 == 0) VoiceReconnectTick(); // toutes les 30 s : reconnexion Discord
+            if (_pendingUpdate != null && _tickCount % 8 == 0) TryAutoInstall(); // mise à jour en attente du repos
+            if (_tickCount == 160 || _tickCount % 1200 == 0) IdleTrim(); // 40 s après le démarrage, puis toutes les 5 min
             if (_mode == Mode.Expanded && PanelMedia.Visibility == Visibility.Visible && _tickCount % 12 == 0) RefreshAppVolumes();
         }
 

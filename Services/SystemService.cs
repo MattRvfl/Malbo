@@ -48,6 +48,7 @@ namespace DynamicIsland
         DateTime _gpuRefresh;
         bool _tempOk = true, _brightOk = true, _gpuOk = true;
         int _lastBright = -1, _n;
+        ManagementObjectSearcher _brightQ;
         List<InfoRow> _bt = new();
         const string BatteryKey = "{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2";
 
@@ -161,8 +162,9 @@ namespace DynamicIsland
             try
             {
                 using var q = new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
-                foreach (ManagementObject o in q.Get())
-                    return Convert.ToDouble(o["CurrentTemperature"]) / 10.0 - 273.15;
+                using var res = q.Get();
+                foreach (ManagementObject o in res)
+                    using (o) return Convert.ToDouble(o["CurrentTemperature"]) / 10.0 - 273.15;
             }
             catch { }
             _tempOk = false;
@@ -174,8 +176,11 @@ namespace DynamicIsland
             if (!_brightOk) return;
             try
             {
-                using var q = new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentBrightness FROM WmiMonitorBrightness");
-                foreach (ManagementObject o in q.Get())
+                // Requête WMI préparée une seule fois (elle tourne chaque seconde), résultats libérés à chaque appel.
+                _brightQ ??= new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentBrightness FROM WmiMonitorBrightness");
+                using var res = _brightQ.Get();
+                foreach (ManagementObject o in res)
+                using (o)
                 {
                     int b = Convert.ToInt32(o["CurrentBrightness"]);
                     if (_lastBright >= 0 && b != _lastBright) BrightnessChanged?.Invoke(b);
@@ -184,6 +189,8 @@ namespace DynamicIsland
                 }
             }
             catch { }
+            try { _brightQ?.Dispose(); } catch { }
+            _brightQ = null;
             _brightOk = false; // écran de bureau : pas de luminosité WMI
         }
 

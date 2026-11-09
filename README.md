@@ -48,7 +48,23 @@ dotnet build -c Release
 
 Pour l'installer sur le PC : icône de la barre des tâches › **Installer Malbo sur ce PC** (raccourcis Menu Démarrer + Bureau, désinstallation via Paramètres Windows).
 
-Pour publier une version : `.\publish.ps1` crée `Malbo-<version>.zip`, à joindre à une release GitHub. Malbo se met ensuite à jour tout seul si le dépôt est renseigné dans les réglages.
+## Mises à jour automatiques
+
+Malbo vérifie au démarrage puis toutes les 6 h le manifeste `update.json` à la racine de ce dépôt (à défaut, la dernière release GitHub), télécharge le nouvel exe, **vérifie son SHA-256**, puis se remplace et redémarre dès que l'île est au repos.
+
+Publier une version :
+
+1. Augmente `<Version>` dans `DynamicIsland.csproj`.
+2. `.\publish.ps1 -Notes "Ce qui change"` → produit `Malbo.exe` et `update.json` (version, url, sha256).
+3. Crée la release `vX.Y.Z` sur GitHub et joins `Malbo.exe`.
+4. Commit + push `update.json` : tous les Malbo installés se mettent à jour.
+
+```json
+{ "version": "1.2.0", "url": "https://github.com/MattRvfl/Malbo/releases/download/v1.2.0/Malbo.exe",
+  "sha256": "…", "notes": "…", "mandatory": false }
+```
+
+`mandatory: true` force l'installation même si l'installation automatique est désactivée dans les réglages.
 
 ## Raccourcis
 
@@ -62,6 +78,7 @@ Pour publier une version : `.\publish.ps1` crée `Malbo-<version>.zip`, à joind
 
 Tout se règle dans **Réglages** (icône de la barre des tâches ou roue crantée dans l'île).
 
+- **Discord (vocal)** : crée une appli sur [discord.com/developers](https://discord.com/developers/applications) **avec ton propre compte** (Discord ne donne l'accès au vocal par RPC qu'au propriétaire de l'appli et aux *App Testers*). Colle l'*Application ID* (Client ID) et le *Client Secret*, ajoute la redirection `http://127.0.0.1` dans OAuth2, garde l'appli Discord de bureau ouverte et clique « Connecter Discord ». Sans ça, Malbo détecte quand même tes appels en local (micro utilisé par Discord).
 - **Spotify** : crée une appli sur [developer.spotify.com](https://developer.spotify.com/dashboard) avec la Redirect URI `http://127.0.0.1:8898/callback`, colle le Client ID puis « Connecter Spotify ».
 - **Agenda** : URL ICS (Google Agenda › Paramètres › Adresse secrète au format iCal).
 - **Steam** : clé API + SteamID64.

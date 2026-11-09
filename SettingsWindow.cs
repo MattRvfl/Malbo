@@ -88,7 +88,9 @@ namespace DynamicIsland
             var dcId = Text("Client ID", () => s.DiscordClientId, v => s.DiscordClientId = v);
             var dcSecret = Text("Client Secret", () => s.DiscordSecret, v => s.DiscordSecret = v);
             var dcRedirect = Text("Redirect URI", () => s.DiscordRedirect, v => s.DiscordRedirect = v);
-            Note("Crée une appli sur discord.com/developers, puis dans OAuth2 ajoute la redirection http://127.0.0.1. Une fenêtre d'autorisation s'ouvrira dans Discord.");
+            Note("Crée une appli sur discord.com/developers avec TON compte (Discord n'autorise la lecture du vocal qu'au propriétaire de l'appli et à ses testeurs). "
+               + "Client ID = « Application ID » ; dans OAuth2 : copie le Client Secret et ajoute la redirection http://127.0.0.1. "
+               + "L'appli Discord de bureau doit être ouverte : une fenêtre d'autorisation s'y affichera.");
             Link("Ouvrir le portail développeur Discord", "https://discord.com/developers/applications");
             var dcSt = Status();
             ConnectButton("Connecter Discord", () => ConnectDiscord, dcSt, () =>
@@ -125,10 +127,12 @@ namespace DynamicIsland
 
             Section("Mises à jour");
             var repo = Text("Dépôt GitHub (owner/nom)", () => s.UpdateRepo, v => s.UpdateRepo = v);
-            Check("Mise à jour automatique", () => s.AutoUpdate, v => s.AutoUpdate = v);
+            Check("Rechercher les mises à jour (au démarrage puis toutes les 6 h)", () => s.AutoUpdate, v => s.AutoUpdate = v);
+            Check("Installer automatiquement quand l'île est au repos", () => s.AutoInstallUpdates, v => s.AutoInstallUpdates = v);
+            Note($"Malbo lit le manifeste {Updater.ManifestFile} du dépôt (sinon la dernière release). Le fichier téléchargé est vérifié par SHA-256 avant d'être installé. Dépôt officiel : {AppSettings.DefaultRepo}.");
             try { Note($"Version installée : {Updater.Current}"); } catch { }
             var upSt = Status();
-            ConnectButton("Vérifier maintenant", () => CheckUpdate, upSt, () => { s.UpdateRepo = repo.Text.Trim(); }, ok: null);
+            ConnectButton("Vérifier maintenant", () => CheckUpdate, upSt, () => { s.UpdateRepo = string.IsNullOrWhiteSpace(repo.Text) ? AppSettings.DefaultRepo : repo.Text.Trim(); }, ok: null);
             bool installed = true;
             try { installed = Installer.IsInstalled; } catch { }
             if (!installed)

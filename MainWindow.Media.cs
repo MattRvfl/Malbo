@@ -521,9 +521,11 @@ namespace DynamicIsland
         void RefreshAppVolumes()
         {
             var cur = AppVolList.ItemsSource as List<AppVolumeItem>;
-            var list = _vol.GetSessions();
-            if (cur != null && cur.Select(x => x.Pid).SequenceEqual(list.Select(x => x.Pid))) return;
+            var list = _vol.GetSessions(onlyIfChanged: cur != null);
+            if (list == null) return; // rien n'a changé
+            if (cur != null && cur.Select(x => x.Pid).SequenceEqual(list.Select(x => x.Pid))) { list.ForEach(x => x.Dispose()); return; }
             AppVolList.ItemsSource = list;
+            cur?.ForEach(x => x.Dispose());
         }
 
         /// <summary>Couleur dominante (saturée) de la pochette.</summary>

@@ -30,17 +30,20 @@ namespace DynamicIsland
             }
             catch (Exception ex) { App.Log(ex); }
 
-            if (S.AutoUpdate && !string.IsNullOrWhiteSpace(S.UpdateRepo))
+            // Vérification 20 s après le démarrage, puis toutes les 6 h (Malbo reste ouvert des jours entiers).
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _updateTimer.Tick += async (s, e) =>
             {
-                var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-                t.Tick += async (s, e) =>
-                {
-                    t.Stop();
-                    try { await CheckUpdateAsync(false); } catch (Exception ex) { App.Log(ex); }
-                };
-                t.Start();
-            }
+                _updateTimer.Interval = TimeSpan.FromHours(6);
+                if (!S.AutoUpdate || string.IsNullOrWhiteSpace(S.UpdateRepo)) return;
+                try { await CheckUpdateAsync(false); } catch (Exception ex) { App.Log(ex); }
+            };
+            _updateTimer.Start();
         }
+
+        DispatcherTimer _updateTimer;
+        UpdateInfo _pendingUpdate;
+        bool _updating;
 
         // ================== Calcul ==================
         void CalcInput_KeyUp(object sender, KeyEventArgs e)
@@ -337,6 +340,14 @@ namespace DynamicIsland
                 return ok;
             }
 
+            // Installation automatique : on attend que l'île soit au repos pour ne pas couper l'utilisateur.
+            if (!manual && (S.AutoInstallUpdates || u.Mandatory))
+            {
+                _pendingUpdate = u;
+                TryAutoInstall();
+                return $"Version {V(u.Version)} : installation automatique dès que Malbo est au repos.";
+            }
+
             var notes = (u.Notes ?? "").Split('\n').Select(l => l.Trim().TrimStart('#', '-', '*', ' ')).FirstOrDefault(l => l.Length > 0);
             ShowPeek(new PeekData
             {
@@ -349,8 +360,21 @@ namespace DynamicIsland
             return $"Version {V(u.Version)} disponible (actuelle : {V(Updater.Current)}).";
         }
 
+        /// <summary>Appelé chaque seconde : lance la mise à jour en attente quand l'île est compacte et inutilisée.</summary>
+        void TryAutoInstall()
+        {
+            var u = _pendingUpdate;
+            if (u == null || _updating) return;
+            bool idle = _mode == Mode.Compact && !HitZone.IsMouseOver && !_menuOpen && _curPeek == null;
+            if (!idle) return;
+            _pendingUpdate = null;
+            _ = ApplyUpdateAsync(u);
+        }
+
         async Task ApplyUpdateAsync(UpdateInfo u)
         {
+            if (_updating) return;
+            _updating = true;
             try
             {
                 ShowPeek(new PeekData { Key = "alert", Glyph = "\uE896", Title = "Mise à jour en cours…", Body = $"Malbo {V(u.Version)} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
@@ -361,6 +385,7 @@ namespace DynamicIsland
                 App.Log(ex);
                 Alert("Mise à jour impossible", ex.Message, "\uE783");
             }
+            finally { _updating = false; }
         }
     }
 }

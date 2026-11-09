@@ -93,15 +93,19 @@ namespace DynamicIsland
                     if (Clipboard.ContainsText())
                     {
                         var t = Clipboard.GetText();
-                        if (string.IsNullOrWhiteSpace(t) || (_clips.Count > 0 && _clips[0].Text == t)) return;
+                        if (string.IsNullOrWhiteSpace(t) || t.Length > 1_000_000 || (_clips.Count > 0 && _clips[0].Text == t)) return;
                         _clips.Insert(0, new ClipItem { Text = t, Time = DateTime.Now });
                     }
                     else if (Clipboard.ContainsImage())
                     {
-                        var img = GetClipboardImage();
-                        if (img == null) return;
-                        _clips.Insert(0, new ClipItem { Text = "", Image = img, Time = DateTime.Now });
-                        ShowScreenshotPeek(img);
+                        var clip = GetClipboardImage();
+                        if (clip == null) return;
+                        _clips.Insert(0, clip);
+                        // pas plus de 8 images gardées (même compressées, une capture 4K pèse plusieurs Mo)
+                        int imgs = 0;
+                        for (int i = 0; i < _clips.Count; i++)
+                            if (_clips[i].Png != null && ++imgs > 8) { _clips.RemoveAt(i); i--; }
+                        ShowScreenshotPeek(clip);
                     }
                     while (_clips.Count > 30) _clips.RemoveAt(_clips.Count - 1);
                     return;
@@ -110,41 +114,56 @@ namespace DynamicIsland
             }
         }
 
-        static BitmapSource GetClipboardImage()
+        /// <summary>
+        /// Lit l'image du presse-papiers, la garde compressée (PNG) et n'en décode qu'une miniature :
+        /// une capture 4K décodée pèse ~33 Mo, 30 dans l'historique pouvaient dépasser 1 Go de RAM.
+        /// </summary>
+        static ClipItem GetClipboardImage()
         {
             // Passe par WinForms : l'alpha des captures est correct (WPF les rend parfois noires/transparentes)
             using var img = System.Windows.Forms.Clipboard.GetImage();
             if (img == null) return null;
-            var ms = new MemoryStream();
-            img.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-            ms.Position = 0;
-            var bi = new BitmapImage();
-            bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.StreamSource = ms; bi.EndInit();
-            bi.Freeze();
-            return bi;
+            byte[] png;
+            using (var ms = new MemoryStream())
+            {
+                img.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                png = ms.ToArray();
+            }
+            BitmapImage thumb;
+            using (var ms = new MemoryStream(png))
+            {
+                thumb = new BitmapImage();
+                thumb.BeginInit(); thumb.CacheOption = BitmapCacheOption.OnLoad;
+                if (img.Width > 480) thumb.DecodePixelWidth = 480;
+                thumb.StreamSource = ms; thumb.EndInit();
+                thumb.Freeze();
+            }
+            return new ClipItem { Text = "", Image = thumb, Png = png, PixelWidth = img.Width, PixelHeight = img.Height, Time = DateTime.Now };
         }
 
-        void ShowScreenshotPeek(BitmapSource img)
+        void ShowScreenshotPeek(ClipItem clip)
         {
             ShowPeek(new PeekData
             {
-                Key = "alert", Image = img, Title = "Capture copiée", Body = $"{img.PixelWidth} × {img.PixelHeight}",
+                Key = "alert", Image = clip.Image, Title = "Capture copiée", Body = $"{clip.PixelWidth} × {clip.PixelHeight}",
                 Duration = TimeSpan.FromSeconds(6), Width = 440, Height = 76,
-                Actions = new() { ("Enregistrer", () => SaveImage(img)) }
+                Actions = new() { ("Enregistrer", () => SaveImage(clip)) }
             });
         }
 
-        void SaveImage(BitmapSource img)
+        void SaveImage(ClipItem clip)
         {
             try
             {
                 var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots");
                 Directory.CreateDirectory(dir);
                 var path = Path.Combine(dir, $"Capture_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-                using (var fs = File.Create(path))
+                if (clip.Png != null) File.WriteAllBytes(path, clip.Png); // déjà en PNG : pas de ré-encodage
+                else
                 {
+                    using var fs = File.Create(path);
                     var enc = new PngBitmapEncoder();
-                    enc.Frames.Add(BitmapFrame.Create(img));
+                    enc.Frames.Add(BitmapFrame.Create(clip.Image));
                     enc.Save(fs);
                 }
                 _shelf.Insert(0, new ShelfItem { Path = path, Icon = IconHelper.FromFile(path) });
@@ -164,7 +183,7 @@ namespace DynamicIsland
             try
             {
                 _ignoreClip = true;
-                if (c.Image != null) Clipboard.SetImage(c.Image); else Clipboard.SetText(c.Text);
+                if (c.Image != null) Clipboard.SetImage(c.LoadFull()); else Clipboard.SetText(c.Text);
                 _clips.Remove(c);
                 _clips.Insert(0, c);
             }

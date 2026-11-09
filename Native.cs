@@ -14,6 +14,27 @@ namespace DynamicIsland
             public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual;
         }
         [DllImport("kernel32.dll")] public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+        [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+        [DllImport("psapi.dll")] public static extern bool EmptyWorkingSet(IntPtr process);
+
+        /// <summary>
+        /// Rend au système la mémoire physique inutilisée (GC compacté + working set vidé). Les pages réellement
+        /// utilisées reviennent d'elles-mêmes : c'est sans danger, mais à n'appeler que quand Malbo est au repos.
+        /// </summary>
+        public static void TrimMemory(bool collect = true)
+        {
+            try
+            {
+                if (collect)
+                {
+                    System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
+                    GC.WaitForPendingFinalizers();
+                }
+                EmptyWorkingSet(GetCurrentProcess());
+            }
+            catch { }
+        }
 
         [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
         [DllImport("user32.dll")] public static extern bool AddClipboardFormatListener(IntPtr h);

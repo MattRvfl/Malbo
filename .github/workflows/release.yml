@@ -1,0 +1,62 @@
+# Publie une release GitHub quand un tag vX.Y.Z est poussé :
+# compile Malbo.exe (fichier unique autonome) sur Windows, calcule son SHA-256,
+# joint Malbo.exe + update.json à la release. Un tag avec un tiret (v1.2.0-beta) = pré-release.
+# Les notes viennent de .github/release-notes/<tag>.md si le fichier existe.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publier Malbo.exe
+        shell: pwsh
+        run: |
+          dotnet publish DynamicIsland.csproj -c Release -r win-x64 -o publish `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish a échoué" }
+
+      - name: Manifeste update.json
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          $sha = (Get-FileHash -Algorithm SHA256 -Path 'publish/Malbo.exe').Hash
+          $manifest = [ordered]@{
+            version   = $version
+            url       = "https://github.com/${{ github.repository }}/releases/download/$tag/Malbo.exe"
+            sha256    = $sha
+            notes     = "Malbo $version"
+            mandatory = $false
+            published = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          }
+          [System.IO.File]::WriteAllText("$PWD/publish/update.json", ($manifest | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
+          $notes = ".github/release-notes/$tag.md"
+          if (-not (Test-Path $notes)) { Set-Content -Path $notes -Value "Malbo $version" -Encoding utf8 }
+          Add-Content -Path $notes -Value "`n---`n**SHA-256 de Malbo.exe** : ``$sha``" -Encoding utf8
+          "NOTES=$notes" >> $env:GITHUB_ENV
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Malbo ${{ github.ref_name }}
+          body_path: ${{ env.NOTES }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            publish/Malbo.exe
+            publish/update.json

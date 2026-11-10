@@ -35,6 +35,16 @@
 - Météo avec alerte pluie, horloges mondiales, agenda (ICS), crypto, bourse, scores sportifs, amis Steam
 - Compteur FPS en jeu (via PresentMon)
 
+**Nouveau en 1.3 (alpha)**
+- Onglet **Plus** : fenêtres ouvertes (clic = basculer), choix de la sortie audio, Wi-Fi / Bluetooth, pipette + règle, clip de jeu, notes rapides, derniers titres écoutés, profils (Normal, Travail, Jeu, Nuit)
+- **Activités en direct** : tes scripts affichent une progression dans l'île via une petite API locale (voir plus bas)
+- **Mode appel** : Teams, Zoom, Meet, Discord… détectés par le micro → chrono, notifications en pause, micro coupé partout avec `Ctrl+Alt+M`
+- Minuteurs nommés (`15 min thé`) et lancement d'applis depuis l'onglet Lancer
+- Presse-papiers : recherche, épingles, **texte d'une capture** (OCR hors ligne)
+- Notifications regroupées par conversation, heures calmes, mots-clés prioritaires, rappel plus tard
+- Traduction des paroles (option), molette sur l'île = volume, île qui suit l'écran de la souris, couleur d'accent perso
+- Canal bêta, sauvegarde / restauration des réglages, jetons chiffrés
+
 **Extensible** : plugins (DLL implémentant `IIslandPlugin` dans `%AppData%\Malbo\plugins`).
 
 ## Installation
@@ -73,6 +83,26 @@ Publier une version :
 | `Ctrl+Alt+I` | Ouvrir / épingler l'île |
 | `Ctrl+Alt+H` | Masquer / afficher |
 | `Ctrl+Alt+Espace` | Lecture / pause |
+| `Ctrl+Alt+M` | Couper / réactiver le micro pour toutes les applis |
+| Molette sur l'île compacte | Volume |
+| Clic molette sur l'île | Lecture / pause |
+
+## Activités en direct (API locale)
+
+Malbo écoute sur `127.0.0.1` uniquement (port 8765 par défaut). Chaque requête doit porter le jeton affiché dans **Réglages › Activités en direct**.
+
+```powershell
+$h = @{ 'X-Malbo-Token' = 'TON_JETON' }
+# créer ou mettre à jour une activité (progress : 0 à 1)
+Invoke-RestMethod http://127.0.0.1:8765/activity -Method Post -Headers $h -ContentType 'application/json' `
+  -Body '{"id":"build","title":"Compilation","body":"étape 3/8","progress":0.4}'
+# terminer (affiche une alerte) / retirer sans alerte / simple message
+Invoke-RestMethod http://127.0.0.1:8765/activity -Method Post -Headers $h -ContentType 'application/json' -Body '{"id":"build","title":"Compilation","done":true}'
+Invoke-RestMethod http://127.0.0.1:8765/activity/build -Method Delete -Headers $h
+Invoke-RestMethod http://127.0.0.1:8765/notify -Method Post -Headers $h -ContentType 'application/json' -Body '{"title":"Rendu prêt","body":"video.mp4"}'
+```
+
+Une activité sans nouvelle depuis 10 minutes disparaît (champ `ttl` en secondes pour changer ce délai).
 
 ## Configuration
 

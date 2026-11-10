@@ -10,7 +10,7 @@
     <AssemblyName>Malbo</AssemblyName>
     <ApplicationIcon>Assets\malbo.ico</ApplicationIcon>
     <Product>Malbo</Product>
-    <Version>1.2.0</Version>
+    <Version>1.3.0-alpha</Version>
     <RootNamespace>DynamicIsland</RootNamespace>
     <NoWarn>CA1416;CS4014;CS1998</NoWarn>
     <!-- Mémoire : GC poste de travail sans thread de fond, rend la RAM au système, ressources en français uniquement. -->

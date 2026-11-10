@@ -62,7 +62,7 @@ namespace DynamicIsland
             {
                 try { r = await Calc.EvaluateAsync(input); } catch (Exception ex) { App.Log(ex); }
             }
-            if (seq == _calcSeq) CalcResult.Text = r ?? "";
+            if (seq == _calcSeq) CalcResult.Text = r ?? LaunchHint(input) ?? "";
             return r;
         }
 
@@ -71,6 +71,7 @@ namespace DynamicIsland
             var input = (CalcInput.Text ?? "").Trim();
             if (input.Length == 0) return;
             var r = await EvalCalc();
+            if (LaunchCommit(input, !string.IsNullOrEmpty(r))) return; // minuteur nommé (« 15 min thé ») ou appli à ouvrir
             if (string.IsNullOrEmpty(r)) return;
             if (_calcHist.Count > 0 && _calcHist[0].Left == input && _calcHist[0].Right == r) return;
             _calcHist.Insert(0, new InfoRow { Left = input, Right = r });
@@ -324,7 +325,7 @@ namespace DynamicIsland
             }
 
             UpdateInfo u;
-            try { u = await Updater.CheckAsync(repo); }
+            try { u = await Updater.CheckAsync(repo, S.BetaChannel); }
             catch (Exception ex)
             {
                 App.Log(ex);
@@ -335,8 +336,8 @@ namespace DynamicIsland
 
             if (u == null)
             {
-                var ok = $"Malbo est à jour (version {V(Updater.Current)}).";
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE73E", Title = "Malbo est à jour", Body = $"Version {V(Updater.Current)}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
+                var ok = $"Malbo est à jour (version {Updater.CurrentName}).";
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE73E", Title = "Malbo est à jour", Body = $"Version {Updater.CurrentName}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
                 return ok;
             }
 
@@ -345,19 +346,19 @@ namespace DynamicIsland
             {
                 _pendingUpdate = u;
                 TryAutoInstall();
-                return $"Version {V(u.Version)} : installation automatique dès que Malbo est au repos.";
+                return $"Version {u.Name} : installation automatique dès que Malbo est au repos.";
             }
 
             var notes = (u.Notes ?? "").Split('\n').Select(l => l.Trim().TrimStart('#', '-', '*', ' ')).FirstOrDefault(l => l.Length > 0);
             ShowPeek(new PeekData
             {
                 Key = "alert", Glyph = "\uE896",
-                Title = $"Mise à jour {V(u.Version)} dispo",
-                Body = string.IsNullOrEmpty(notes) ? $"Version actuelle : {V(Updater.Current)}" : notes,
+                Title = $"Mise à jour {u.Name} dispo",
+                Body = string.IsNullOrEmpty(notes) ? $"Version actuelle : {Updater.CurrentName}" : notes,
                 Duration = TimeSpan.FromSeconds(12), Width = 460, Height = 76,
                 Actions = new() { ("Installer", () => _ = ApplyUpdateAsync(u)) }
             });
-            return $"Version {V(u.Version)} disponible (actuelle : {V(Updater.Current)}).";
+            return $"Version {u.Name} disponible (actuelle : {Updater.CurrentName}).";
         }
 
         /// <summary>Appelé chaque seconde : lance la mise à jour en attente quand l'île est compacte et inutilisée.</summary>
@@ -377,7 +378,7 @@ namespace DynamicIsland
             _updating = true;
             try
             {
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE896", Title = "Mise à jour en cours…", Body = $"Malbo {V(u.Version)} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE896", Title = "Mise à jour en cours…", Body = $"Malbo {u.Name} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
                 await Updater.ApplyAsync(u);
             }
             catch (Exception ex)

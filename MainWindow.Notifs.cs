@@ -46,16 +46,31 @@ namespace DynamicIsland
             if (blocked.Any(b => d.App.Contains(b, StringComparison.OrdinalIgnoreCase))) return;
             if (d.App.Contains("Malbo", StringComparison.OrdinalIgnoreCase)) return;
 
-            _notifs.Insert(0, new NotifItem { Id = d.Id, App = d.App, Aumid = d.Aumid, Title = d.Title, Body = d.Body, Time = d.Time, Icon = d.Icon });
+            var item = new NotifItem { Id = d.Id, App = d.App, Aumid = d.Aumid, Title = d.Title, Body = d.Body, Time = d.Time, Icon = d.Icon };
+            item.Ids.Add(d.Id);
+            // Regroupement : même appli + même titre (= même conversation) → une seule carte avec un compteur.
+            if (S.GroupNotifs)
+            {
+                var same = _notifs.FirstOrDefault(n => n.App == d.App && n.Title == d.Title && !string.IsNullOrEmpty(d.Title));
+                if (same != null)
+                {
+                    item.Count = same.Count + 1;
+                    item.Ids.AddRange(same.Ids);
+                    var prev = (same.Body ?? "").Split('\n').Take(3);
+                    item.Body = string.Join("\n", new[] { d.Body }.Concat(prev).Where(x => !string.IsNullOrWhiteSpace(x)));
+                    _notifs.Remove(same);
+                }
+            }
+            _notifs.Insert(0, item);
             while (_notifs.Count > 60) _notifs.RemoveAt(_notifs.Count - 1);
             TabNotif.Tag = $"Notifs ({_notifs.Count})";
 
-            if (Quiet) return;
+            if (Quiet && !IsPriority(d)) return;
             string aumid = d.Aumid, app = d.App;
             ShowPeek(new PeekData
             {
                 Key = "notif", Image = d.Icon, Glyph = "\uEA8F",
-                Title = string.IsNullOrEmpty(d.Title) ? d.App : $"{d.Title}",
+                Title = (string.IsNullOrEmpty(d.Title) ? d.App : d.Title) + (item.Count > 1 ? $"  ({item.Count})" : ""),
                 Body = string.IsNullOrEmpty(d.Body) ? d.App : $"{d.App} · {d.Body.Replace("\n", " ")}",
                 Duration = TimeSpan.FromSeconds(5), Width = 440, Height = 76,
                 OnClick = () =>
@@ -66,8 +81,56 @@ namespace DynamicIsland
             });
         }
 
-        /// <summary>Ne pas déranger, ou Pomodoro en phase de travail avec le mode Focus.</summary>
-        bool Quiet => S.DoNotDisturb || (S.FocusDnd && _tm == TMode.Pomo && _tRun && _pomoWork);
+        /// <summary>Ne pas déranger, Pomodoro en phase de travail (Focus), appel en cours, ou heures calmes.</summary>
+        bool Quiet => S.DoNotDisturb || (S.FocusDnd && _tm == TMode.Pomo && _tRun && _pomoWork)
+                      || (S.MeetingDnd && (_dcCall || _discord.InChannel)) || InQuietHours();
+
+        /// <summary>Heures calmes « 23:00-07:00 » (la plage peut passer minuit).</summary>
+        bool InQuietHours()
+        {
+            var q = (S.QuietHours ?? "").Trim();
+            if (q.Length == 0) return false;
+            var parts = q.Replace('h', ':').Split('-', StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || !TimeSpan.TryParse(parts[0].TrimEnd(':'), out var a) || !TimeSpan.TryParse(parts[1].TrimEnd(':'), out var b)) return false;
+            var now = DateTime.Now.TimeOfDay;
+            return a <= b ? now >= a && now < b : now >= a || now < b;
+        }
+
+        /// <summary>Un mot-clé prioritaire (réglages) fait passer la notification malgré Ne pas déranger.</summary>
+        bool IsPriority(NotifData d)
+        {
+            var keys = (S.PriorityKeywords ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (keys.Length == 0) return false;
+            var text = $"{d.App} {d.Title} {d.Body}";
+            return keys.Any(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // ---------- Rappel plus tard ----------
+        void NotifSnooze_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.Tag is not NotifItem n) return;
+            e.Handled = true;
+            _notifs.Remove(n);
+            TabNotif.Tag = _notifs.Count > 0 ? $"Notifs ({_notifs.Count})" : "Notifs";
+            int min = Math.Clamp(S.SnoozeMinutes, 1, 720);
+            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(min) };
+            t.Tick += (s, a) =>
+            {
+                t.Stop();
+                n.Time = DateTime.Now;
+                _notifs.Insert(0, n);
+                TabNotif.Tag = $"Notifs ({_notifs.Count})";
+                ShowPeek(new PeekData
+                {
+                    Key = "notif", Image = n.Icon as System.Windows.Media.Imaging.BitmapSource, Glyph = "\uE823",
+                    Title = "Rappel · " + (string.IsNullOrEmpty(n.Title) ? n.App : n.Title),
+                    Body = string.IsNullOrEmpty(n.Body) ? n.App : $"{n.App} · {n.Body.Replace("\n", " ")}",
+                    Duration = TimeSpan.FromSeconds(6), Width = 440, Height = 76,
+                    OnClick = () => { try { AppLauncher.OpenApp(n.Aumid, n.App); } catch (Exception ex) { App.Log(ex); } if (_mode == Mode.Peek) EndPeek(); }
+                });
+            };
+            t.Start();
+        }
 
         void NotifDismiss_Click(object sender, RoutedEventArgs e)
         {
@@ -77,7 +140,8 @@ namespace DynamicIsland
         void RemoveNotif(NotifItem n)
         {
             _notifs.Remove(n);
-            _notif.Remove(n.Id);
+            if (n.Ids != null && n.Ids.Count > 0) foreach (var id in n.Ids) _notif.Remove(id);
+            else _notif.Remove(n.Id);
             TabNotif.Tag = _notifs.Count > 0 ? $"Notifs ({_notifs.Count})" : "Notifs";
         }
 
@@ -187,9 +251,14 @@ namespace DynamicIsland
             {
                 bool inCh = _discord.InChannel;
                 VoiceCard.Visibility = inCh || DiscordCallLocal ? Visibility.Visible : Visibility.Collapsed;
-                VoiceMuteBtn.Visibility = inCh ? Visibility.Visible : Visibility.Collapsed;
+                VoiceMuteBtn.Visibility = inCh || DiscordCallLocal ? Visibility.Visible : Visibility.Collapsed;
                 if (!inCh && DiscordCallLocal)
                 {
+                    // appel détecté en local : le bouton coupe le micro pour toutes les applis
+                    bool mm = _vol.MicMuted;
+                    VoiceMuteBtn.FontFamily = (FontFamily)FindResource("Icons");
+                    VoiceMuteBtn.Content = mm ? "\uEC54" : "\uE720";
+                    VoiceMuteBtn.ToolTip = mm ? "Réactiver le micro (Ctrl+Alt+M)" : "Couper le micro partout (Ctrl+Alt+M)";
                     VoiceChannel.Text = LocalVoiceLabel();
                     VoiceList.ItemsSource = null;
                     _voiceSig = null;
@@ -216,16 +285,27 @@ namespace DynamicIsland
 
         async void VoiceMute_Click(object sender, RoutedEventArgs e)
         {
+            if (!_discord.InChannel) { ToggleMicGlobal(); return; }
             try { await _discord.ToggleMuteAsync(); } catch (Exception ex) { App.Log(ex); }
             UpdateVoiceUI();
         }
 
-        // ---------- Détection locale d'un appel Discord (sans RPC) ----------
-        // Discord réserve la lecture du vocal (rpc.voice.read) aux applis approuvées : on déduit l'appel
-        // du micro utilisé par Discord, et la parole des niveaux audio (sortie Discord = les autres, micro = toi).
+        // ---------- Détection locale d'un appel (Discord, Teams, Zoom, Meet…), sans connexion ----------
+        // On déduit l'appel de l'appli qui tient le micro, et la parole des niveaux audio
+        // (son sortant de l'appli = les autres, micro = toi). Discord garde en plus son lecteur vocal RPC s'il est connecté.
         bool _dcCall;
         long _dcOutT, _dcMicT;
         bool _dcLastOthers, _dcLastMe;
+        string _callApp = "", _callProc = "";
+        DateTime _callStart;
+
+        // nom du processus qui tient le micro → nom affiché
+        static readonly (string Key, string Name)[] CallApps =
+        {
+            ("discord", "Discord"), ("teams", "Teams"), ("zoom", "Zoom"), ("skype", "Skype"), ("slack", "Slack"), ("webex", "Webex"),
+            ("whatsapp", "WhatsApp"), ("telegram", "Telegram"), ("signal", "Signal"), ("facetime", "FaceTime"),
+            ("chrome", "Appel (Chrome)"), ("msedge", "Appel (Edge)"), ("firefox", "Appel (Firefox)"), ("brave", "Appel (Brave)"), ("opera", "Appel (Opera)")
+        };
 
         bool DiscordCallLocal => _dcCall && !_discord.InChannel;
         bool OthersSpeaking => Environment.TickCount64 - _dcOutT < 600;
@@ -234,18 +314,24 @@ namespace DynamicIsland
         void LocalVoiceTick()
         {
             var s = _sys.Latest;
-            bool call = s.Mic && (s.MicApp ?? "").IndexOf("discord", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (call != _dcCall)
+            string mic = s.Mic ? (s.MicApp ?? "") : "";
+            var hit = mic.Length == 0 ? default : CallApps.FirstOrDefault(a => mic.Contains(a.Key, StringComparison.OrdinalIgnoreCase));
+            bool call = hit.Key != null;
+            if (call != _dcCall || (call && hit.Name != _callApp))
             {
                 _dcCall = call;
-                if (call && !_discord.InChannel)
-                    ShowPeek(new PeekData { Key = "alert", Glyph = "", Title = "Appel Discord", Body = "En cours", Duration = TimeSpan.FromSeconds(2.5), Width = 320, Height = 68 });
+                if (call)
+                {
+                    _callApp = hit.Name; _callProc = hit.Key; _callStart = DateTime.Now;
+                    if (!_discord.InChannel)
+                        ShowPeek(new PeekData { Key = "alert", Glyph = "\uE717", Title = _callApp, Body = "Appel en cours" + (S.MeetingDnd ? " · notifications en pause" : ""), Duration = TimeSpan.FromSeconds(2.5), Width = 340, Height = 68 });
+                }
                 UpdateVoiceUI();
             }
             if (!DiscordCallLocal) return;
             var now = Environment.TickCount64;
-            if (_vol.AppPeak("discord") > 0.015f) _dcOutT = now;
-            if (_vol.MicPeak > 0.04f) _dcMicT = now;
+            if (_vol.AppPeak(_callProc) > 0.015f) _dcOutT = now;
+            if (_vol.MicPeak > 0.04f && !_vol.MicMuted) _dcMicT = now;
             if (OthersSpeaking != _dcLastOthers || MeSpeaking != _dcLastMe)
             {
                 _dcLastOthers = OthersSpeaking; _dcLastMe = MeSpeaking;
@@ -254,11 +340,20 @@ namespace DynamicIsland
             }
         }
 
-        string LocalVoiceLabel() =>
-            OthersSpeaking && MeSpeaking ? "\U0001F399 Toi + quelqu'un"
-            : OthersSpeaking ? "\U0001F399 Quelqu'un parle"
-            : MeSpeaking ? "\U0001F399 Tu parles"
-            : "Appel Discord en cours";
+        string CallClock()
+        {
+            var d = DateTime.Now - _callStart;
+            return d.TotalHours >= 1 ? d.ToString(@"h\:mm\:ss") : d.ToString(@"m\:ss");
+        }
+
+        string LocalVoiceLabel()
+        {
+            string who = _vol.MicMuted ? "Micro coupé"
+                : OthersSpeaking && MeSpeaking ? "Toi + quelqu'un"
+                : OthersSpeaking ? "Quelqu'un parle"
+                : MeSpeaking ? "Tu parles" : null;
+            return who == null ? $"{_callApp} · {CallClock()}" : $"{_callApp} · {CallClock()} · {who}";
+        }
 
         bool AnySpeaking
         {

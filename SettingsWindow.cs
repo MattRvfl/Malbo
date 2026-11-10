@@ -47,7 +47,11 @@ namespace DynamicIsland
             Combo("Thème", new[] { "Sombre", "Clair", "Auto" }, () => s.Theme, v => s.Theme = v);
             Slide("Opacité", 0.4, 1, () => s.Opacity, v => s.Opacity = v);
             Slide("Taille", 0.8, 1.5, () => s.Scale, v => s.Scale = v);
+            Check("L'île suit l'écran où se trouve la souris", () => s.FollowMouseScreen, v => s.FollowMouseScreen = v);
             Check("Couleur d'accent selon la pochette", () => s.AccentFromArt, v => s.AccentFromArt = v);
+            Text("Couleur d'accent perso (#RRGGBB)", () => s.AccentColor, v => { if (System.Text.RegularExpressions.Regex.IsMatch(v, "^#?[0-9a-fA-F]{6}$")) s.AccentColor = v.StartsWith("#") ? v : "#" + v; });
+            Note("Utilisée quand « selon la pochette » est décoché.");
+            Check("Molette sur l'île compacte = volume · clic molette = lecture/pause", () => s.WheelVolume, v => s.WheelVolume = v);
             Check("Paroles dans l'île compacte", () => s.LyricsInCompact, v => s.LyricsInCompact = v);
             Check("Afficher le morceau quand il change", () => s.TrackPeek, v => s.TrackPeek = v);
             Check("OSD volume", () => s.VolumeOsd, v => s.VolumeOsd = v);
@@ -67,6 +71,7 @@ namespace DynamicIsland
             Check("Fichiers", () => s.ShowFiles, v => s.ShowFiles = v);
             Check("Système", () => s.ShowSystem, v => s.ShowSystem = v);
             Check("Infos", () => s.ShowInfo, v => s.ShowInfo = v);
+            Check("Plus (fenêtres, activités, sortie audio, notes…)", () => s.ShowMore, v => s.ShowMore = v);
             Check("Plugins", () => s.ShowPlugins, v => s.ShowPlugins = v);
 
             Section("Notifications");
@@ -74,6 +79,13 @@ namespace DynamicIsland
             Note("Les notifs restent dans le centre de notifications Windows. Les bannières reviennent quand tu quittes Malbo.");
             Check("Ne pas déranger", () => s.DoNotDisturb, v => s.DoNotDisturb = v);
             Text("Applis ignorées (séparées par des virgules)", () => s.BlockedApps, v => s.BlockedApps = v);
+            Check("Regrouper les messages d'une même conversation", () => s.GroupNotifs, v => s.GroupNotifs = v);
+            Text("Heures calmes (ex. 23:00-07:00)", () => s.QuietHours, v => s.QuietHours = v);
+            Text("Mots-clés prioritaires (virgules)", () => s.PriorityKeywords, v => s.PriorityKeywords = v);
+            Note("Une notification qui contient un mot-clé prioritaire (nom d'un contact, « urgent »…) s'affiche même en Ne pas déranger, pendant un appel ou les heures calmes.");
+            Text("Rappel plus tard (minutes)", () => s.SnoozeMinutes.ToString(), v => { if (int.TryParse(v, out var n) && n > 0 && n <= 720) s.SnoozeMinutes = n; });
+            Check("Pendant un appel (Teams, Zoom, Meet, Discord…) : notifications en pause", () => s.MeetingDnd, v => s.MeetingDnd = v);
+            Check("Alertes système (disque plein, surchauffe, batterie Bluetooth faible)", () => s.SystemAlerts, v => s.SystemAlerts = v);
             Note("Windows doit autoriser l'accès : Paramètres › Confidentialité et sécurité › Notifications.");
             Link("Ouvrir les paramètres de notifications", "ms-settings:privacy-notifications");
 
@@ -83,6 +95,18 @@ namespace DynamicIsland
             Link("Ouvrir le tableau de bord Spotify", "https://developer.spotify.com/dashboard");
             var spSt = Status();
             ConnectButton("Connecter Spotify", () => ConnectSpotify, spSt, () => { s.SpotifyClientId = spId.Text.Trim(); });
+
+            Section("Paroles");
+            Check("Traduire les paroles", () => s.TranslateLyrics, v => s.TranslateLyrics = v);
+            Text("Langue de traduction (fr, en, es…)", () => s.TranslateTo, v => { if (v.Length >= 2 && v.Length <= 5) s.TranslateTo = v.ToLowerInvariant(); });
+            Note("Passe par le service public de Google Traduction : les paroles du titre en cours lui sont envoyées. Désactivé par défaut.");
+
+            Section("Activités en direct");
+            Check("API locale pour tes scripts (127.0.0.1 uniquement)", () => s.LiveApi, v => s.LiveApi = v);
+            Text("Port", () => s.LiveApiPort.ToString(), v => { if (int.TryParse(v, out var n) && n >= 1024 && n <= 65535) s.LiveApiPort = n; });
+            Text("Jeton (à envoyer dans X-Malbo-Token)", () => s.LiveApiToken, v => { if (v.Length >= 8) s.LiveApiToken = v; });
+            Note("Exemple PowerShell : Invoke-RestMethod http://127.0.0.1:" + s.LiveApiPort + "/activity -Method Post -Headers @{'X-Malbo-Token'='" + s.LiveApiToken + "'} -ContentType 'application/json' -Body '{\"id\":\"build\",\"title\":\"Compilation\",\"progress\":0.4}'");
+            Note("Champs : id, title, body, progress (0 à 1), done (true = terminé), ttl (secondes). DELETE /activity/<id> retire l'activité · POST /notify {title, body} affiche un message.");
 
             Section("Discord");
             var dcId = Text("Client ID", () => s.DiscordClientId, v => s.DiscordClientId = v);
@@ -129,8 +153,9 @@ namespace DynamicIsland
             var repo = Text("Dépôt GitHub (owner/nom)", () => s.UpdateRepo, v => s.UpdateRepo = v);
             Check("Rechercher les mises à jour (au démarrage puis toutes les 6 h)", () => s.AutoUpdate, v => s.AutoUpdate = v);
             Check("Installer automatiquement quand l'île est au repos", () => s.AutoInstallUpdates, v => s.AutoInstallUpdates = v);
+            Check("Canal bêta : recevoir aussi les pré-versions (alpha, bêta)", () => s.BetaChannel, v => s.BetaChannel = v);
             Note($"Malbo lit le manifeste {Updater.ManifestFile} du dépôt (sinon la dernière release). Le fichier téléchargé est vérifié par SHA-256 avant d'être installé. Dépôt officiel : {AppSettings.DefaultRepo}.");
-            try { Note($"Version installée : {Updater.Current}"); } catch { }
+            try { Note($"Version installée : {Updater.CurrentName}"); } catch { }
             var upSt = Status();
             ConnectButton("Vérifier maintenant", () => CheckUpdate, upSt, () => { s.UpdateRepo = string.IsNullOrWhiteSpace(repo.Text) ? AppSettings.DefaultRepo : repo.Text.Trim(); }, ok: null);
             bool installed = true;
@@ -155,8 +180,42 @@ namespace DynamicIsland
                 _p.Children.Add(instSt);
             }
 
+            Section("Sauvegarde");
+            Note("Exporte tous tes réglages, tâches, alarmes, notes et raccourcis dans un fichier. Les connexions Spotify/Discord sont liées à ce compte Windows : sur un autre PC il faudra les refaire.");
+            var bkSt = Status();
+            var exp = Btn("Exporter les réglages…", () =>
+            {
+                try
+                {
+                    var d = new Microsoft.Win32.SaveFileDialog { FileName = $"Malbo-reglages-{DateTime.Now:yyyyMMdd}.json", Filter = "Réglages Malbo (*.json)|*.json" };
+                    if (d.ShowDialog(this) != true) return;
+                    foreach (var c in _commit) c();
+                    s.ExportTo(d.FileName);
+                    bkSt.Text = "Exporté ✔ " + d.FileName;
+                }
+                catch (Exception ex) { bkSt.Text = ex.Message; }
+            });
+            var imp = Btn("Importer…", () =>
+            {
+                try
+                {
+                    var d = new Microsoft.Win32.OpenFileDialog { Filter = "Réglages Malbo (*.json)|*.json" };
+                    if (d.ShowDialog(this) != true) return;
+                    var loaded = AppSettings.ImportFrom(d.FileName);
+                    if (MessageBox.Show(this, "Remplacer tous les réglages actuels par ceux du fichier ? Malbo va redémarrer.", "Importer les réglages", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+                    loaded.Save();
+                    Process.Start(new ProcessStartInfo(Environment.ProcessPath, $"--wait-pid {Environment.ProcessId}") { UseShellExecute = false });
+                    Application.Current.Shutdown();
+                }
+                catch (Exception ex) { bkSt.Text = "Import impossible : " + ex.Message; }
+            });
+            var bkRow = new StackPanel { Orientation = Orientation.Horizontal };
+            bkRow.Children.Add(exp); bkRow.Children.Add(imp);
+            _p.Children.Add(bkRow);
+            _p.Children.Add(bkSt);
+
             Section("Avancé");
-            Note("Raccourcis : Ctrl+Alt+I ouvre/épingle l'île · Ctrl+Alt+H masque/affiche · Ctrl+Alt+Espace lecture/pause.");
+            Note("Raccourcis : Ctrl+Alt+I ouvre/épingle l'île · Ctrl+Alt+H masque/affiche · Ctrl+Alt+Espace lecture/pause · Ctrl+Alt+M coupe le micro partout.");
             var pl = Btn("Ouvrir le dossier des plugins", () =>
             {
                 Directory.CreateDirectory(AppSettings.PluginDir);

@@ -93,7 +93,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="Transparent" CornerRadius="15" Height="30" MinWidth="36" Padding="10,0">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="15" Height="30" MinWidth="32" Padding="8,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <ContentPresenter VerticalAlignment="Center"/>
                                 <TextBlock x:Name="lbl" Text="{TemplateBinding Tag}" FontFamily="Segoe UI" FontSize="12" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>

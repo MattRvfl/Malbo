@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -25,6 +26,9 @@ namespace DynamicIsland
         {
             ShelfList.ItemsSource = _shelf;
             ClipList.ItemsSource = _clips;
+            // épingles : seuls les textes épinglés survivent au redémarrage (jamais tout l'historique : il peut contenir des mots de passe)
+            foreach (var t in (S.PinnedClips ?? new()).Where(t => !string.IsNullOrEmpty(t)))
+                _clips.Add(new ClipItem { Text = t, Time = DateTime.Now, Pinned = true });
             foreach (var p in S.Shelf.Where(p => File.Exists(p) || Directory.Exists(p)))
                 _shelf.Add(new ShelfItem { Path = p, Icon = IconHelper.FromFile(p) });
             InitDownloads();
@@ -93,21 +97,22 @@ namespace DynamicIsland
                     if (Clipboard.ContainsText())
                     {
                         var t = Clipboard.GetText();
-                        if (string.IsNullOrWhiteSpace(t) || t.Length > 1_000_000 || (_clips.Count > 0 && _clips[0].Text == t)) return;
-                        _clips.Insert(0, new ClipItem { Text = t, Time = DateTime.Now });
+                        if (string.IsNullOrWhiteSpace(t) || t.Length > 1_000_000 || (_clips.Count > PinnedCount() && _clips[PinnedCount()].Text == t)) return;
+                        if (_clips.Any(c => c.Pinned && c.Text == t)) return; // déjà épinglé
+                        _clips.Insert(PinnedCount(), new ClipItem { Text = t, Time = DateTime.Now });
                     }
                     else if (Clipboard.ContainsImage())
                     {
                         var clip = GetClipboardImage();
                         if (clip == null) return;
-                        _clips.Insert(0, clip);
+                        _clips.Insert(PinnedCount(), clip);
                         // pas plus de 8 images gardées (même compressées, une capture 4K pèse plusieurs Mo)
                         int imgs = 0;
                         for (int i = 0; i < _clips.Count; i++)
                             if (_clips[i].Png != null && ++imgs > 8) { _clips.RemoveAt(i); i--; }
                         ShowScreenshotPeek(clip);
                     }
-                    while (_clips.Count > 30) _clips.RemoveAt(_clips.Count - 1);
+                    while (_clips.Count > 30 + PinnedCount() && !_clips[_clips.Count - 1].Pinned) _clips.RemoveAt(_clips.Count - 1);
                     return;
                 }
                 catch { System.Threading.Thread.Sleep(60); }
@@ -146,8 +151,8 @@ namespace DynamicIsland
             ShowPeek(new PeekData
             {
                 Key = "alert", Image = clip.Image, Title = "Capture copiée", Body = $"{clip.PixelWidth} × {clip.PixelHeight}",
-                Duration = TimeSpan.FromSeconds(6), Width = 440, Height = 76,
-                Actions = new() { ("Enregistrer", () => SaveImage(clip)) }
+                Duration = TimeSpan.FromSeconds(6), Width = 500, Height = 76,
+                Actions = new() { ("Texte", () => _ = CopyTextFromImage(clip)), ("Enregistrer", () => SaveImage(clip)) }
             });
         }
 
@@ -184,13 +189,75 @@ namespace DynamicIsland
             {
                 _ignoreClip = true;
                 if (c.Image != null) Clipboard.SetImage(c.LoadFull()); else Clipboard.SetText(c.Text);
-                _clips.Remove(c);
-                _clips.Insert(0, c);
+                if (!c.Pinned) { _clips.Remove(c); _clips.Insert(PinnedCount(), c); }
             }
             catch { _ignoreClip = false; }
         }
 
-        void ClipClear_Click(object sender, RoutedEventArgs e) => _clips.Clear();
+        void ClipClear_Click(object sender, RoutedEventArgs e)
+        {
+            // « Effacer » garde les épingles
+            for (int i = _clips.Count - 1; i >= 0; i--) if (!_clips[i].Pinned) _clips.RemoveAt(i);
+        }
+
+        int PinnedCount() => _clips.Count(c => c.Pinned);
+
+        void SavePinned()
+        {
+            S.PinnedClips = _clips.Where(c => c.Pinned && c.Png == null && !string.IsNullOrEmpty(c.Text)).Select(c => c.Text).ToList();
+            S.Save();
+        }
+
+        void ClipSearch_Changed(object sender, TextChangedEventArgs e)
+        {
+            var q = (ClipSearch.Text ?? "").Trim();
+            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(_clips);
+            view.Filter = q.Length == 0 ? null : o => o is ClipItem c && (c.Text ?? "").Contains(q, StringComparison.OrdinalIgnoreCase);
+        }
+
+        void Clip_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not ClipItem c) return;
+            e.Handled = true;
+            var m = NewMenu();
+            m.Items.Add(MenuEntry(c.Pinned ? "Désépingler" : "Épingler", () =>
+            {
+                int i = _clips.IndexOf(c);
+                if (i < 0) return;
+                _clips.RemoveAt(i);
+                c.Pinned = !c.Pinned;
+                _clips.Insert(c.Pinned ? 0 : PinnedCount(), c);
+                SavePinned();
+            }));
+            if (c.Png != null)
+            {
+                m.Items.Add(MenuEntry("Copier le texte de l'image", () => _ = CopyTextFromImage(c)));
+                m.Items.Add(MenuEntry("Enregistrer l'image", () => SaveImage(c)));
+            }
+            m.Items.Add(MenuSep());
+            m.Items.Add(MenuEntry("Supprimer", () => { _clips.Remove(c); if (c.Pinned) SavePinned(); }));
+            m.PlacementTarget = sender as UIElement;
+            m.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            m.IsOpen = true;
+        }
+
+        /// <summary>Lit le texte d'une capture (OCR intégré à Windows, hors ligne) et le copie.</summary>
+        async Task CopyTextFromImage(ClipItem clip)
+        {
+            try
+            {
+                var text = (await OcrService.ReadAsync(clip.Png) ?? "").Trim();
+                if (text.Length == 0) { Alert("Aucun texte trouvé", "L'image ne contient pas de texte lisible.", "\uE8C8"); return; }
+                try { _ignoreClip = true; Clipboard.SetText(text); } catch { _ignoreClip = false; }
+                if (!_clips.Any(c => c.Text == text)) _clips.Insert(PinnedCount(), new ClipItem { Text = text, Time = DateTime.Now });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE8C8", Title = "Texte copié", Body = text.Replace("\r", "").Replace("\n", " "), Duration = TimeSpan.FromSeconds(4), Width = 440, Height = 76 });
+            }
+            catch (Exception ex)
+            {
+                App.Log(ex);
+                Alert("Lecture du texte impossible", ex.Message, "\uE783");
+            }
+        }
 
         // ---------- Téléchargements ----------
         void InitDownloads()

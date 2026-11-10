@@ -29,7 +29,10 @@ namespace DynamicIsland
         public string Title { get; set; }
         public string Body { get; set; }
         public DateTime Time { get; set; }
-        public string Header => $"{App} · {Time:HH:mm}";
+        /// <summary>Nombre de notifications regroupées dans cette carte (même appli, même conversation).</summary>
+        public int Count { get; set; } = 1;
+        public System.Collections.Generic.List<uint> Ids { get; set; } = new();
+        public string Header => $"{App} · {Time:HH:mm}" + (Count > 1 ? $" · {Count} messages" : "");
         public ImageSource Icon { get; set; }
     }
 
@@ -55,6 +58,8 @@ namespace DynamicIsland
         public DateTime Time { get; set; }
         public string Preview => Image != null ? "Image" : (Text.Length > 160 ? Text.Substring(0, 160) + "…" : Text).Replace("\r", "").Trim();
         public string TimeText => Time.ToString("HH:mm");
+        public bool Pinned { get; set; }
+        public string Footer => (Pinned ? "📌 Épinglé · " : "") + TimeText;
         public Visibility ImageVis => Image != null ? Visibility.Visible : Visibility.Collapsed;
     }
 

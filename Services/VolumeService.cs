@@ -206,5 +206,103 @@ namespace DynamicIsland
             }
             return list;
         }
+
+        // ---------- Volume général, micro global, choix de la sortie ----------
+        /// <summary>Change le volume général de <paramref name="delta"/> (ex. ±0.02 par cran de molette).</summary>
+        public void Nudge(float delta)
+        {
+            try
+            {
+                var v = _dev?.AudioEndpointVolume;
+                if (v == null) return;
+                v.MasterVolumeLevelScalar = Math.Clamp(v.MasterVolumeLevelScalar + delta, 0f, 1f);
+            }
+            catch { }
+        }
+
+        MMDevice CaptureDevice()
+        {
+            _ = MicPeak; // (re)charge le micro par défaut
+            return _mic;
+        }
+
+        /// <summary>Micro par défaut coupé pour toutes les applis (réunions Teams, Zoom, Meet, Discord…).</summary>
+        public bool MicMuted
+        {
+            get { try { return CaptureDevice()?.AudioEndpointVolume.Mute ?? false; } catch { return false; } }
+        }
+
+        /// <summary>Bascule le micro. Renvoie le nouvel état (true = coupé), ou null s'il n'y a pas de micro.</summary>
+        public bool? ToggleMicMute()
+        {
+            try
+            {
+                var m = CaptureDevice();
+                if (m == null) return null;
+                bool next = !m.AudioEndpointVolume.Mute;
+                m.AudioEndpointVolume.Mute = next;
+                return next;
+            }
+            catch (Exception ex) { App.Log(ex); return null; }
+        }
+
+        public List<(string Id, string Name, bool IsDefault)> Outputs()
+        {
+            var list = new List<(string, string, bool)>();
+            try
+            {
+                if (_en == null) return list;
+                var col = _en.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+                foreach (var d in col)
+                {
+                    try { list.Add((d.ID, d.FriendlyName, d.ID == _devId)); } catch { }
+                    finally { d.Dispose(); }
+                }
+            }
+            catch (Exception ex) { App.Log(ex); }
+            return list;
+        }
+
+        /// <summary>Change la sortie audio par défaut de Windows (même effet que le menu son de la barre des tâches).</summary>
+        public bool SetDefaultOutput(string id)
+        {
+            object o = null;
+            try
+            {
+                o = new PolicyConfigClient();
+                var pc = (IPolicyConfig)o;
+                for (int role = 0; role < 3; role++) // console, multimédia, communications
+                {
+                    int hr = pc.SetDefaultEndpoint(id, role);
+                    if (hr != 0) return false;
+                }
+                Attach();
+                return true;
+            }
+            catch (Exception ex) { App.Log(ex); return false; }
+            finally { if (o != null) System.Runtime.InteropServices.Marshal.FinalReleaseComObject(o); }
+        }
+
+        // Interface système non documentée mais stable depuis Windows 7 (utilisée par tous les sélecteurs de sortie audio).
+        [System.Runtime.InteropServices.ComImport, System.Runtime.InteropServices.Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9")]
+        class PolicyConfigClient { }
+
+        [System.Runtime.InteropServices.ComImport, System.Runtime.InteropServices.Guid("f8679f50-850a-41cf-9c72-430f290290c8"),
+         System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+        interface IPolicyConfig
+        {
+            [System.Runtime.InteropServices.PreserveSig] int Unused1();
+            [System.Runtime.InteropServices.PreserveSig] int Unused2();
+            [System.Runtime.InteropServices.PreserveSig] int Unused3();
+            [System.Runtime.InteropServices.PreserveSig] int Unused4();
+            [System.Runtime.InteropServices.PreserveSig] int Unused5();
+            [System.Runtime.InteropServices.PreserveSig] int Unused6();
+            [System.Runtime.InteropServices.PreserveSig] int Unused7();
+            [System.Runtime.InteropServices.PreserveSig] int Unused8();
+            [System.Runtime.InteropServices.PreserveSig] int Unused9();
+            [System.Runtime.InteropServices.PreserveSig] int Unused10();
+            [System.Runtime.InteropServices.PreserveSig]
+            int SetDefaultEndpoint([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string deviceId, int role);
+        }
     }
 }

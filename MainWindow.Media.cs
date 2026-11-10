@@ -101,6 +101,7 @@ namespace DynamicIsland
             else LikeBtn.Visibility = PlaylistBtn.Visibility = Vis(IsSpotifyApi);
             UpdateShuffleRepeatUI();
             UpdateBackdrop();
+            RecordHistory(st);
 
             // Petit "peek" quand un nouveau morceau démarre
             if (S.TrackPeek && st.HasMedia && st.IsPlaying && st.Key != _peekedKey && _mode != Mode.Expanded)
@@ -356,6 +357,34 @@ namespace DynamicIsland
                 for (int i = 0; i < _lyricBlocks.Count; i++) StyleLine(i, false);
                 Dispatcher.BeginInvoke(new Action(ScrollLyrics), System.Windows.Threading.DispatcherPriority.Loaded);
             }
+            if (S.TranslateLyrics) _ = TranslateLyricsAsync(key, res);
+        }
+
+        readonly TranslateService _translate = new();
+
+        /// <summary>Ajoute la traduction sous chaque ligne (plus petite, atténuée). Sans effet si les paroles sont déjà dans la langue voulue.</summary>
+        async Task TranslateLyricsAsync(string key, List<LyricLine> lines)
+        {
+            try
+            {
+                var lang = string.IsNullOrWhiteSpace(S.TranslateTo) ? "fr" : S.TranslateTo.Trim().ToLowerInvariant();
+                var tr = await _translate.LinesAsync(key, lines.Select(l => l.Text ?? "").ToList(), lang);
+                if (tr == null || key != _lyricKey || _lines != lines) return;
+                for (int i = 0; i < _lyricBlocks.Count && i < tr.Length; i++)
+                {
+                    var t = tr[i];
+                    var orig = lines[i].Text;
+                    if (string.IsNullOrWhiteSpace(t) || string.IsNullOrWhiteSpace(orig) || string.Equals(t, orig.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                    var tb = _lyricBlocks[i];
+                    tb.Inlines.Clear();
+                    tb.Inlines.Add(new System.Windows.Documents.Run(orig));
+                    tb.Inlines.Add(new System.Windows.Documents.LineBreak());
+                    tb.Inlines.Add(new System.Windows.Documents.Run(t) { FontSize = 12, FontWeight = FontWeights.Normal });
+                }
+                LyricsStatus.Text += " · traduites";
+                if (_lyricsSynced) Dispatcher.BeginInvoke(new Action(ScrollLyrics), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+            catch (Exception ex) { App.Log(ex); }
         }
 
         /// <summary>Opacité, échelle et flou d'une ligne selon sa distance à la ligne courante.</summary>

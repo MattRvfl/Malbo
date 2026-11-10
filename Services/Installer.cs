@@ -185,6 +185,9 @@ namespace DynamicIsland
         public bool Mandatory;
         /// <summary>« manifest » ou « release ».</summary>
         public string Source;
+        /// <summary>Suffixe de pré-version (« alpha », « beta.2 »…), vide pour une version finale.</summary>
+        public string Pre = "";
+        public string Name => Version == null ? "?" : Version.ToString(3) + (string.IsNullOrEmpty(Pre) ? "" : "-" + Pre);
     }
 
     /// <summary>
@@ -226,27 +229,74 @@ namespace DynamicIsland
             return parts.Length >= 2 ? parts[0] + "/" + parts[1] : null;
         }
 
-        static bool TryVersion(string s, out Version v)
+        /// <summary>Suffixe de pré-version de l'exe en cours (« alpha », « beta »…), vide pour une version finale.</summary>
+        public static string CurrentPre
         {
-            v = null;
+            get
+            {
+                try
+                {
+                    var info = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+                    return TryVersion(info, out _, out var pre) ? pre : "";
+                }
+                catch { return ""; }
+            }
+        }
+
+        public static string CurrentName => Current.ToString(3) + (CurrentPre.Length > 0 ? "-" + CurrentPre : "");
+
+        static bool TryVersion(string s, out Version v) => TryVersion(s, out v, out _);
+
+        /// <summary>Lit « v1.3.0-alpha+abc » → (1.3.0, "alpha").</summary>
+        static bool TryVersion(string s, out Version v, out string pre)
+        {
+            v = null; pre = "";
             if (string.IsNullOrWhiteSpace(s)) return false;
             s = s.Trim().TrimStart('v', 'V');
-            int dash = s.IndexOfAny(new[] { '-', '+' });
-            if (dash > 0) s = s.Substring(0, dash);
+            int plus = s.IndexOf('+');
+            if (plus >= 0) s = s.Substring(0, plus);
+            int dash = s.IndexOf('-');
+            if (dash > 0) { pre = s.Substring(dash + 1).Trim().ToLowerInvariant(); s = s.Substring(0, dash); }
             if (!Version.TryParse(s, out var p)) return false;
             v = Three(p);
             return true;
         }
 
-        /// <summary>Renvoie la mise à jour disponible, ou null si Malbo est à jour. Lève une exception si le dépôt est injoignable.</summary>
-        public static async Task<UpdateInfo> CheckAsync(string repo)
+        /// <summary>Compare deux versions. À numéro égal : alpha &lt; beta &lt; rc &lt; version finale (sans suffixe).</summary>
+        static int Cmp(Version v1, string p1, Version v2, string p2)
+        {
+            int c = v1.CompareTo(v2);
+            if (c != 0) return c;
+            p1 ??= ""; p2 ??= "";
+            if (p1.Length == 0 || p2.Length == 0) return p2.Length.CompareTo(p1.Length) == 0 ? 0 : (p1.Length == 0 ? 1 : -1);
+            return Math.Sign(string.CompareOrdinal(p1, p2));
+        }
+
+        static bool IsNewer(Version v, string pre) => Cmp(v, pre, Current, CurrentPre) > 0;
+
+        /// <summary>
+        /// Renvoie la mise à jour disponible, ou null si Malbo est à jour. Lève une exception si le dépôt est injoignable.
+        /// Avec <paramref name="beta"/>, les pré-versions (alpha, bêta) publiées sur GitHub sont aussi proposées.
+        /// </summary>
+        public static async Task<UpdateInfo> CheckAsync(string repo, bool beta = false)
         {
             repo = NormRepo(repo);
             if (repo == null) throw new ArgumentException("Dépôt GitHub invalide (format attendu : propriétaire/nom).");
 
             var fromManifest = await CheckManifestAsync(repo);
-            if (fromManifest.Found) return fromManifest.Info;
-            return await CheckReleaseAsync(repo);
+            if (!beta)
+            {
+                if (fromManifest.Found) return fromManifest.Info;
+                return await CheckReleaseAsync(repo, false);
+            }
+            // Canal bêta : on garde la plus récente entre le manifeste (version finale) et les pré-versions GitHub.
+            UpdateInfo pre = null;
+            try { pre = await CheckReleaseAsync(repo, true); }
+            catch { if (fromManifest.Info == null) throw; }
+            var st = fromManifest.Info;
+            if (pre == null) return st;
+            if (st == null) return pre;
+            return Cmp(st.Version, st.Pre, pre.Version, pre.Pre) >= 0 ? st : pre;
         }
 
         static async Task<(bool Found, UpdateInfo Info)> CheckManifestAsync(string repo)
@@ -261,15 +311,15 @@ namespace DynamicIsland
                 var r = doc.RootElement;
                 string Str(string n) => r.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-                if (!TryVersion(Str("version"), out var ver)) return (false, null);
-                if (ver <= Current) return (true, null);
+                if (!TryVersion(Str("version"), out var ver, out var pre)) return (false, null);
+                if (!IsNewer(ver, pre)) return (true, null);
 
                 string dl = Str("url");
                 if (string.IsNullOrWhiteSpace(dl) || !dl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return (false, null);
                 bool mandatory = r.TryGetProperty("mandatory", out var m) && m.ValueKind == JsonValueKind.True;
                 var info = new UpdateInfo
                 {
-                    Version = ver, Notes = Str("notes") ?? "", Sha256 = Str("sha256"), Mandatory = mandatory, Source = "manifest"
+                    Version = ver, Pre = pre, Notes = Str("notes") ?? "", Sha256 = Str("sha256"), Mandatory = mandatory, Source = "manifest"
                 };
                 if (dl.Split('?')[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) info.ZipUrl = dl; else info.ExeUrl = dl;
                 return (true, info);
@@ -280,36 +330,50 @@ namespace DynamicIsland
             }
         }
 
-        static async Task<UpdateInfo> CheckReleaseAsync(string repo)
+        static async Task<UpdateInfo> CheckReleaseAsync(string repo, bool includePre)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/releases/latest");
+            // /releases/latest ignore les pré-versions ; la liste complète les contient (la plus récente en premier).
+            var api = includePre ? $"https://api.github.com/repos/{repo}/releases?per_page=15" : $"https://api.github.com/repos/{repo}/releases/latest";
+            using var req = new HttpRequestMessage(HttpMethod.Get, api);
             req.Headers.Accept.ParseAdd("application/vnd.github+json");
             using var resp = await Http.SendAsync(req);
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null; // aucune release publiée
             if ((int)resp.StatusCode == 403) throw new HttpRequestException("limite de l'API GitHub atteinte, réessaie plus tard.");
             resp.EnsureSuccessStatusCode();
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            var root = doc.RootElement;
 
-            string tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-            if (!TryVersion(tag, out var ver) || ver <= Current) return null;
-
-            string zip = null, exe = null;
-            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            UpdateInfo best = null;
+            var items = doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.EnumerateArray().ToList() : new System.Collections.Generic.List<JsonElement> { doc.RootElement };
+            foreach (var root in items)
             {
-                foreach (var a in assets.EnumerateArray())
-                {
-                    string name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    string url = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
-                    if (name == null || url == null) continue;
-                    if (exe == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe = url;
-                    else if (zip == null && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zip = url;
-                }
-            }
-            if (zip == null && exe == null) return null;
+                if (root.TryGetProperty("draft", out var dr) && dr.ValueKind == JsonValueKind.True) continue;
+                string tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+                if (!TryVersion(tag, out var ver, out var pre) || !IsNewer(ver, pre)) continue;
+                if (best != null && Cmp(ver, pre, best.Version, best.Pre) <= 0) continue;
 
-            string notes = root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : "";
-            return new UpdateInfo { Version = ver, ZipUrl = zip, ExeUrl = exe, Notes = notes, Source = "release" };
+                string zip = null, exe = null, sha = null;
+                if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in assets.EnumerateArray())
+                    {
+                        string name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
+                        string url = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                        if (name == null || url == null) continue;
+                        if (exe == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            exe = url;
+                            // GitHub publie l'empreinte de chaque fichier joint (« sha256:… ») : on la vérifie aussi.
+                            if (a.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String && dg.GetString().StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+                                sha = dg.GetString().Substring(7);
+                        }
+                        else if (zip == null && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zip = url;
+                    }
+                }
+                if (zip == null && exe == null) continue;
+                string notes = root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : "";
+                best = new UpdateInfo { Version = ver, Pre = pre, ZipUrl = exe == null ? zip : null, ExeUrl = exe, Notes = notes, Sha256 = exe != null ? sha : null, Source = "release" };
+            }
+            return best;
         }
 
         /// <summary>Télécharge dans un fichier temporaire en calculant le SHA-256 au passage, puis vérifie l'empreinte attendue.</summary>

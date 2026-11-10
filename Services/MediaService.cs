@@ -156,12 +156,14 @@ namespace DynamicIsland
             {
                 using var ras = await r.OpenReadAsync();
                 using var st = ras.AsStreamForRead();
-                var ms = new MemoryStream();
+                using var ms = new MemoryStream();
                 await st.CopyToAsync(ms);
                 ms.Position = 0;
                 var bi = new BitmapImage();
                 bi.BeginInit();
                 bi.CacheOption = BitmapCacheOption.OnLoad;
+                // Les pochettes peuvent faire 1400 px (≈ 8 Mo décodés) : l'île n'affiche jamais plus de ~300 px.
+                bi.DecodePixelWidth = 360;
                 bi.StreamSource = ms;
                 bi.EndInit();
                 bi.Freeze();

@@ -10,7 +10,11 @@
         <SolidColorBrush x:Key="Fg" Color="#FFFFFFFF"/>
         <SolidColorBrush x:Key="SubFg" Color="#FF8E8E93"/>
         <SolidColorBrush x:Key="Accent" Color="#FF0A84FF"/>
-        <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+        <!-- Icônes Phosphor (MIT) embarquées : même rendu sur Windows 10 et 11. « Icons » = contour épais, « IconsFill » = pleines. -->
+        <FontFamily x:Key="Icons">/Malbo;component/Assets/Fonts/#Phosphor-Bold</FontFamily>
+        <FontFamily x:Key="IconsFill">/Malbo;component/Assets/Fonts/#Phosphor-Fill</FontFamily>
+        <!-- Texte courant pouvant contenir une icône (météo, épingle…) : les caractères d'icône retombent sur Phosphor. -->
+        <FontFamily x:Key="TextIcons">Segoe UI Variable Text, Segoe UI, /Malbo;component/Assets/Fonts/#Phosphor-Bold</FontFamily>
 
         <Style x:Key="H" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
@@ -19,13 +23,24 @@
         </Style>
         <Style x:Key="Sub" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SubFg}"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="11.5"/>
         </Style>
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBg}"/>
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Padding" Value="12"/>
             <Setter Property="Margin" Value="4"/>
+        </Style>
+
+        <!-- Anneau de focus visible uniquement en navigation clavier (Tab) -->
+        <Style x:Key="FocusRing">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Rectangle Margin="-2" RadiusX="12" RadiusY="12" Stroke="{DynamicResource Accent}" StrokeThickness="2" SnapsToDevicePixels="True"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="IconBtn" TargetType="Button">
@@ -35,7 +50,7 @@
             <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -61,7 +76,7 @@
             <Setter Property="Padding" Value="11,5"/>
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -88,12 +103,12 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="GroupName" Value="Tabs"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Margin" Value="0,0,3,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="b" Background="Transparent" CornerRadius="15" Height="30" MinWidth="36" Padding="10,0">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="15" Height="30" MinWidth="32" Padding="8,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <ContentPresenter VerticalAlignment="Center"/>
                                 <TextBlock x:Name="lbl" Text="{TemplateBinding Tag}" FontFamily="Segoe UI" FontSize="12" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
@@ -118,7 +133,7 @@
             <Setter Property="Foreground" Value="{DynamicResource SubFg}"/>
             <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -188,7 +203,7 @@
             </Setter>
         </Style>
         <Style TargetType="Slider">
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -253,8 +268,8 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="{Binding Left}" Foreground="{DynamicResource Fg}" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Sub}" Foreground="{DynamicResource SubFg}" FontSize="10.5" TextTrimming="CharacterEllipsis" Visibility="{Binding SubVis}"/>
+                    <TextBlock Text="{Binding Left}" Foreground="{DynamicResource Fg}" FontSize="12" FontFamily="{StaticResource TextIcons}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding Sub}" Foreground="{DynamicResource SubFg}" FontSize="11" FontFamily="{StaticResource TextIcons}" TextTrimming="CharacterEllipsis" Visibility="{Binding SubVis}"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding Right}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0">
                     <TextBlock.Style>

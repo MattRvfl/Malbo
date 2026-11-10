@@ -19,8 +19,10 @@ namespace DynamicIsland
     {
         public string Key = "";
         public ImageSource Image;
-        public string Glyph = "\uEA8F";
+        public string Glyph = "\uE0CE";
         public string Title, Body;
+        /// <summary>Regroupement dans la file d'attente (nom de l'appli pour une notification).</summary>
+        public string Group = "";
         public double? Progress;
         public TimeSpan Duration = TimeSpan.FromSeconds(4);
         public double Width = 420, Height = 76;
@@ -31,7 +33,7 @@ namespace DynamicIsland
     public partial class MainWindow : Window
     {
         enum Mode { Compact, Peek, Expanded }
-        enum Act { None, Media, Timer, Voice, Download }
+        enum Act { None, Media, Timer, Live, Voice, Download }
         Mode _mode = Mode.Compact;
         bool _pinned, _userHidden, _fsHidden, _ready, _menuOpen;
         PeekData _curPeek;
@@ -72,7 +74,7 @@ namespace DynamicIsland
             _tabs = new()
             {
                 [TabMedia] = PanelMedia, [TabNotif] = PanelNotif, [TabTools] = PanelTools, [TabFiles] = PanelFiles,
-                [TabSystem] = PanelSystem, [TabInfo] = PanelInfo, [TabLaunch] = PanelLaunch, [TabPlugins] = PanelPlugins
+                [TabSystem] = PanelSystem, [TabInfo] = PanelInfo, [TabLaunch] = PanelLaunch, [TabMore] = PanelMore, [TabPlugins] = PanelPlugins
             };
 
             // Tous les événements souris passent par la zone de survol élargie
@@ -82,6 +84,8 @@ namespace DynamicIsland
             HitZone.MouseMove += HitZone_Move;
             HitZone.MouseLeftButtonUp += Island_Click;
             HitZone.MouseRightButtonUp += HitZone_RightClick;
+            HitZone.PreviewMouseWheel += HitZone_Wheel;   // molette sur l'île compacte : volume
+            HitZone.MouseDown += HitZone_MiddleClick;     // clic molette : lecture / pause
             Island.SizeChanged += (s, e) => UpdateClip();
             Island.DragEnter += (s, e) => { if (_mode != Mode.Expanded) { Expand(); TabFiles.IsChecked = true; } };
             Island.Drop += (s, e) =>
@@ -93,7 +97,7 @@ namespace DynamicIsland
             Bubble.MouseLeftButtonUp += Bubble_Click;
 
             _hover.Tick += (s, e) => { _hover.Stop(); if (_mode == Mode.Compact && HitZone.IsMouseOver) Expand(); };
-            _leave.Tick += (s, e) => { _leave.Stop(); if (!HitZone.IsMouseOver && !_pinned && !_menuOpen && _mode == Mode.Expanded) Collapse(); };
+            _leave.Tick += (s, e) => { _leave.Stop(); if (!HitZone.IsMouseOver && !_pinned && !_menuOpen && !Typing && _mode == Mode.Expanded) Collapse(); };
             _peekT.Tick += (s, e) =>
             {
                 if (HitZone.IsMouseOver && _curPeek?.Key != "osd") return; // reste affiché tant que la souris est dessus
@@ -124,8 +128,12 @@ namespace DynamicIsland
             InitSystem();
             InitInfo();
             InitLaunch();
+            InitMore();
             InitPlugins();
             InitTray();
+            InitKeyboard();
+            CheckIconFont();
+            FirstRunTip();
             _fast.Start();
             _tick.Start();
             UpdateCompact(true);
@@ -141,6 +149,7 @@ namespace DynamicIsland
             Native.RegisterHotKey(_hwnd, 1, Native.MOD_CONTROL | Native.MOD_ALT, 0x49); // Ctrl+Alt+I : ouvrir/épingler
             Native.RegisterHotKey(_hwnd, 2, Native.MOD_CONTROL | Native.MOD_ALT, 0x48); // Ctrl+Alt+H : masquer/afficher
             Native.RegisterHotKey(_hwnd, 3, Native.MOD_CONTROL | Native.MOD_ALT, 0x20); // Ctrl+Alt+Espace : play/pause
+            Native.RegisterHotKey(_hwnd, 4, Native.MOD_CONTROL | Native.MOD_ALT, 0x4D); // Ctrl+Alt+M : couper le micro partout
         }
 
         IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -156,6 +165,7 @@ namespace DynamicIsland
                         break;
                     case 2: _userHidden = !_userHidden; UpdateVisibility(); break;
                     case 3: _media.TogglePlay(); break;
+                    case 4: ToggleMicGlobal(); break;
                 }
                 handled = true;
             }
@@ -207,11 +217,25 @@ namespace DynamicIsland
             TabInfo.Visibility = Vis(S.ShowInfo);
             TabLaunch.Visibility = Vis(S.ShowLaunch);
             TabPlugins.Visibility = Vis(S.ShowPlugins);
-            var first = _tabs.Keys.FirstOrDefault(t => t.Visibility == Visibility.Visible);
-            if (_tabs.Keys.FirstOrDefault(t => t.IsChecked == true)?.Visibility != Visibility.Visible && first != null) first.IsChecked = true;
+            TabMore.Visibility = Vis(S.ShowMore);
+            LayoutTabs(); // onglets principaux dans la barre, les autres derrière « … »
             DndCheck.IsChecked = S.DoNotDisturb;
             SetStartup(S.StartWithWindows);
-            if (!S.AccentFromArt) Application.Current.Resources["Accent"] = new SolidColorBrush(Color.FromRgb(10, 132, 255));
+            if (!S.AccentFromArt || !_media.State.HasMedia || _media.State.Art == null) SetAccent(CustomAccent());
+            if (_liveHost != null) ApplyLiveApi(); // port ou activation changés dans les réglages
+        }
+
+        /// <summary>Couleur d'accent choisie dans les réglages (#RRGGBB), bleu Malbo si elle est invalide.</summary>
+        static Color CustomAccent()
+        {
+            try
+            {
+                var hex = (S.AccentColor ?? "").Trim();
+                if (hex.Length > 0 && !hex.StartsWith("#")) hex = "#" + hex;
+                if (hex.Length == 7) return (Color)ColorConverter.ConvertFromString(hex);
+            }
+            catch { }
+            return Color.FromRgb(10, 132, 255);
         }
 
         static Visibility Vis(bool b) => b ? Visibility.Visible : Visibility.Collapsed;
@@ -238,7 +262,7 @@ namespace DynamicIsland
         void PositionWindow()
         {
             var screens = System.Windows.Forms.Screen.AllScreens;
-            var sc = screens[Math.Clamp(S.ScreenIndex, 0, screens.Length - 1)];
+            var sc = screens[TargetScreen()];
             var b = sc.Bounds;
             var dpi = VisualTreeHelper.GetDpi(this);
             double left = b.Left / dpi.DpiScaleX, top = b.Top / dpi.DpiScaleY, sw = b.Width / dpi.DpiScaleX;
@@ -251,7 +275,7 @@ namespace DynamicIsland
                 default:
                     Left = left + (sw - Width) / 2; Root.HorizontalAlignment = HorizontalAlignment.Center; break;
             }
-            Top = top;
+            Top = top + Math.Clamp(S.TopOffset, 0, 200); // décalage vertical : laisse voir les onglets du navigateur / la barre de titre
         }
 
         static void SetStartup(bool on)
@@ -273,7 +297,7 @@ namespace DynamicIsland
             w.ConnectDiscord = () => _discord.ConnectAsync(true);
             w.CheckUpdate = () => CheckUpdateAsync(true);
             w.Install = Installer.Install;
-            w.Saved += () => { ApplySettings(); RefreshInfo(true); UpdateBanners(); };
+            w.Saved += () => { ApplySettings(); RefreshInfo(true); UpdateBanners(); BuildProfiles(); if (_notesBox != null && _notesBox.Text != S.Notes) _notesBox.Text = S.Notes ?? ""; };
             w.Show();
             w.Activate();
         }
@@ -285,7 +309,7 @@ namespace DynamicIsland
         void SetPinned(bool p)
         {
             _pinned = p;
-            PinBtn.Content = p ? "\uE77A" : "\uE718";
+            PinBtn.FontFamily = (FontFamily)FindResource(p ? "IconsFill" : "Icons"); // punaise pleine quand l'île est épinglée
             PinBtn.Foreground = p ? (Brush)FindResource("Accent") : (Brush)FindResource("Fg");
         }
 
@@ -441,17 +465,35 @@ namespace DynamicIsland
             if (_curPeek != null && _curPeek.Key != "osd") _peeks.Clear();
             _curPeek = null;
             _mode = Mode.Expanded;
-            AnimateSize(ExpW, ExpH);
             ShowLayer(ExpandedLayer);
-            OnTabShown();
+            OnTabShown(); // fixe aussi la hauteur selon l'onglet
         }
 
         void Collapse()
         {
+            if (Keyboard.FocusedElement is DependencyObject fo && fo is Visual && ((Visual)fo).IsDescendantOf(Island)) Keyboard.ClearFocus();
             _mode = Mode.Compact;
             ShowLayer(CompactLayer);
             UpdateCompact(true);
             if (_peeks.Count > 0) Dispatcher.BeginInvoke(new Action(NextPeek), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// File d'attente raisonnable : au plus 3 aperçus en attente, et un seul par appli pour les notifications
+        /// (le plus récent remplace l'ancien) — après une rafale de messages, l'île ne rejoue pas dix aperçus périmés.
+        /// </summary>
+        void EnqueuePeek(PeekData p)
+        {
+            var list = _peeks.ToList();
+            if (p.Key == "notif") list.RemoveAll(x => x.Key == "notif" && x.Group == p.Group);
+            list.Add(p);
+            while (list.Count > 3)
+            {
+                int drop = list.FindIndex(x => x.Key == "notif");
+                list.RemoveAt(drop >= 0 && drop < list.Count - 1 ? drop : 0);
+            }
+            _peeks.Clear();
+            foreach (var x in list) _peeks.Enqueue(x);
         }
 
         public void ShowPeek(PeekData p)
@@ -459,7 +501,7 @@ namespace DynamicIsland
             if (_mode == Mode.Expanded)
             {
                 if (p.Key == "osd" || p.Key == "notif" || p.Key == "track") return;
-                _peeks.Enqueue(p);
+                EnqueuePeek(p);
                 return;
             }
             if (_mode == Mode.Peek)
@@ -469,9 +511,12 @@ namespace DynamicIsland
                     RenderPeek(p); _curPeek = p; _peekT.Stop(); _peekT.Interval = p.Duration; _peekT.Start();
                     return;
                 }
-                if (_curPeek?.Key == "osd" || _curPeek?.Key == "track") { _peeks.Enqueue(p); _peekT.Stop(); EndPeek(); return; }
+                if (_curPeek?.Key == "osd" || _curPeek?.Key == "track") { EnqueuePeek(p); _peekT.Stop(); EndPeek(); return; }
                 if (p.Key == "osd") return;
-                _peeks.Enqueue(p);
+                EnqueuePeek(p);
+                // quelque chose attend : l'aperçu affiché n'occupe pas l'île plus de 2,5 s de plus
+                if (_curPeek != null && _curPeek.Actions == null && _peekT.Interval > TimeSpan.FromSeconds(2.5))
+                { _peekT.Stop(); _peekT.Interval = TimeSpan.FromSeconds(2.5); _peekT.Start(); }
                 return;
             }
             DisplayPeek(p);
@@ -485,7 +530,10 @@ namespace DynamicIsland
             AnimateSize(p.Width, p.Height);
             ShowLayer(PeekLayer);
             _peekT.Stop();
-            _peekT.Interval = p.Duration;
+            // d'autres aperçus attendent : on raccourcit (sauf s'il y a un bouton à cliquer)
+            var dur = p.Duration;
+            if (_peeks.Count > 0 && p.Actions == null && dur > TimeSpan.FromSeconds(3)) dur = TimeSpan.FromSeconds(3);
+            _peekT.Interval = dur;
             _peekT.Start();
         }
 
@@ -548,6 +596,7 @@ namespace DynamicIsland
             var l = new List<Act>(4);
             if (_media.State.HasMedia) l.Add(Act.Media);
             if (_tRun) l.Add(Act.Timer);
+            if (_liveList.Count > 0) l.Add(Act.Live);
             if (_discord.InChannel || DiscordCallLocal) l.Add(Act.Voice);
             if (_activeDl.Count > 0) l.Add(Act.Download);
             return l;
@@ -588,44 +637,53 @@ namespace DynamicIsland
 
             if (_fpsMode)
             {
-                SetCompactIcon("\uE7FC", (Brush)FindResource("Accent"));
+                SetCompactIcon("\uE26E", (Brush)FindResource("Accent"));
                 Bars.Visibility = Visibility.Collapsed;
-                text = $"{_fps.Fps:0} FPS";
-                w = 130;
+                // superposition de performances : FPS + charge processeur / carte graphique
+                var perf = _sys.Latest;
+                text = $"{_fps.Fps:0} FPS · CPU {perf.Cpu:0} %" + (perf.Gpu >= 0 ? $" · GPU {perf.Gpu:0} %" : "") + (perf.Temp > 0 ? $" · {perf.Temp:0}°" : "");
+                w = 150 + (perf.Gpu >= 0 ? 70 : 0) + (perf.Temp > 0 ? 40 : 0) + 60;
             }
             else switch (main)
             {
                 case Act.Media:
                     CompactIcon.SetResourceReference(TextBlock.ForegroundProperty, "SubFg");
                     CompactIcon.Visibility = st.Art == null ? Visibility.Visible : Visibility.Collapsed;
-                    CompactIcon.Text = "\uE8D6";
+                    CompactIcon.Text = "\uE340";
                     CompactArt.Visibility = st.Art != null ? Visibility.Visible : Visibility.Collapsed;
                     text = lyric ? _currentLyric : (st.IsPlaying ? st.Title : $"{st.Title} — en pause");
                     Bars.Visibility = st.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
                     w = lyric ? 420 : 330;
                     break;
                 case Act.Timer:
-                    SetCompactIcon("\uE916", (Brush)FindResource("Accent"));
+                    SetCompactIcon("\uE492", (Brush)FindResource("Accent"));
                     Bars.Visibility = Visibility.Collapsed;
                     text = $"{TimerLabel} · {TimerText()}";
                     w = 230;
                     break;
+                case Act.Live:
+                    var la = _liveList[0];
+                    SetCompactIcon(string.IsNullOrEmpty(la.Glyph) ? "\uE000" : la.Glyph, (Brush)FindResource("Accent"));
+                    Bars.Visibility = Visibility.Collapsed;
+                    text = LiveText(la) + (_liveList.Count > 1 ? $"  +{_liveList.Count - 1}" : "");
+                    w = Math.Clamp(120 + text.Length * 7.2, 200, 380);
+                    break;
                 case Act.Voice:
-                    SetCompactIcon("\uE767", AnySpeaking ? Green : null);
+                    SetCompactIcon("\uE584", AnySpeaking ? Green : null);
                     Bars.Visibility = Visibility.Collapsed;
                     text = VoiceCompactText();
                     w = 280;
                     break;
                 case Act.Download:
-                    SetCompactIcon("\uE896", (Brush)FindResource("Accent"));
+                    SetCompactIcon("\uE20C", (Brush)FindResource("Accent"));
                     Bars.Visibility = Visibility.Collapsed;
                     text = "Téléchargement · " + DownloadName();
                     w = 300;
                     break;
                 default:
-                    SetCompactIcon("\uE823", null);
+                    SetCompactIcon(_weather != null ? InfoService.WeatherIcon(_weather.Code) : Ico.Clock, null);
                     Bars.Visibility = Visibility.Collapsed;
-                    text = DateTime.Now.ToString("HH:mm") + (_weather != null ? $"   {InfoService.WeatherIcon(_weather.Code)} {_weather.Temp:0}°" : "");
+                    text = DateTime.Now.ToString("HH:mm") + (_weather != null ? $"   {_weather.Temp:0}°" : "");
                     w = 200;
                     break;
             }
@@ -687,14 +745,28 @@ namespace DynamicIsland
                         BubbleGlyph.ToolTip = null;
                         Bubble.ToolTip = TimerLabel;
                         break;
+                    case Act.Live:
+                        var la = _liveList.Count > 0 ? _liveList[0] : null;
+                        if (la == null) break;
+                        BubbleGlyph.Text = string.IsNullOrEmpty(la.Glyph) ? "\uE000" : la.Glyph;
+                        BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+                        if (la.IsTimer || la.Progress.HasValue)
+                        {
+                            double lp = LiveProgress(la);
+                            BubbleTrack.Visibility = Visibility.Visible;
+                            BubbleRing.Visibility = lp > 0.001 ? Visibility.Visible : Visibility.Hidden;
+                            BubbleRing.StrokeDashArray = new DoubleCollection { lp * RingLen, RingLen * 2 };
+                        }
+                        Bubble.ToolTip = LiveText(la);
+                        break;
                     case Act.Voice:
-                        BubbleGlyph.Text = "\uE767";
+                        BubbleGlyph.Text = "\uE584";
                         if (AnySpeaking) BubbleGlyph.Foreground = Green;
                         else BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
                         Bubble.ToolTip = VoiceCompactText();
                         break;
                     case Act.Download:
-                        BubbleGlyph.Text = "\uE896";
+                        BubbleGlyph.Text = "\uE20C";
                         BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
                         Bubble.ToolTip = "Téléchargement · " + DownloadName();
                         break;
@@ -725,6 +797,7 @@ namespace DynamicIsland
             switch (a)
             {
                 case Act.Timer: TabTools.IsChecked = true; break;
+                case Act.Live: TabMore.IsChecked = true; break;
                 case Act.Voice: TabNotif.IsChecked = true; break;
                 case Act.Download: TabSystem.IsChecked = true; break;
             }
@@ -734,6 +807,21 @@ namespace DynamicIsland
         // ================== Ticks ==================
         readonly Random _rnd = new();
         readonly double[] _barH = new double[5];
+        static readonly double[] BarWeights = { 0.6, 0.95, 1.0, 0.8, 0.55 };
+        FrameworkElement[] _bars;
+        int _trimInFlight;
+
+        /// <summary>Au repos (île compacte, souris ailleurs), rend la RAM inutilisée au système.</summary>
+        void IdleTrim()
+        {
+            if (_mode != Mode.Compact || HitZone.IsMouseOver || _menuOpen) return;
+            if (System.Threading.Interlocked.Exchange(ref _trimInFlight, 1) == 1) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { Native.TrimMemory(); }
+                finally { System.Threading.Interlocked.Exchange(ref _trimInFlight, 0); }
+            });
+        }
 
         /// <summary>40 ms seulement quand c'est utile (barres visibles, onglet Média ouvert), arrêt complet si l'île est masquée.</summary>
         void UpdateFastTimer()
@@ -753,13 +841,13 @@ namespace DynamicIsland
             if (Bars.Visibility == Visibility.Visible && _mode == Mode.Compact && Root.Visibility == Visibility.Visible)
             {
                 var peak = Math.Min(1, _vol.Peak * 1.6);
-                var bars = new[] { Bar0, Bar1, Bar2, Bar3, Bar4 };
-                double[] weights = { 0.6, 0.95, 1.0, 0.8, 0.55 };
+                var bars = _bars ??= new[] { Bar0, Bar1, Bar2, Bar3, Bar4 };
                 for (int i = 0; i < 5; i++)
                 {
-                    double target = 3 + peak * 15 * weights[i] * (0.55 + _rnd.NextDouble() * 0.45);
+                    double target = 3 + peak * 15 * BarWeights[i] * (0.55 + _rnd.NextDouble() * 0.45);
                     _barH[i] += (target - _barH[i]) * 0.45;
-                    bars[i].Height = Math.Max(3, _barH[i]);
+                    double h = Math.Max(3, _barH[i]);
+                    if (Math.Abs(bars[i].Height - h) > 0.25) bars[i].Height = h; // évite une passe de layout inutile
                 }
             }
             MediaTick();
@@ -773,7 +861,9 @@ namespace DynamicIsland
             if (_tickCount % 4 != 0) return;
 
             // --- chaque seconde ---
-            _sys.Detailed = _mode == Mode.Expanded && PanelSystem.Visibility == Visibility.Visible;
+            _sys.Detailed = (_mode == Mode.Expanded && PanelSystem.Visibility == Visibility.Visible) || _fpsMode;
+            _live.Tick();
+            FollowMouseTick();
 
             // plein écran (jeux, vidéos) + compteur FPS
             var h = Native.ForegroundFullscreenWindow(_hwnd);
@@ -806,11 +896,18 @@ namespace DynamicIsland
             {
                 if (PanelSystem.Visibility == Visibility.Visible) UpdateSystemUI();
                 if (PanelInfo.Visibility == Visibility.Visible) UpdateClocks();
+                if (PanelMore.Visibility == Visibility.Visible)
+                {
+                    if (_liveList.Count > 0) RefreshLive();
+                    if (_tickCount % 8 == 0) { RefreshWindows(); UpdateMicBtn(); }
+                }
             }
             if (_tickCount % 12 == 0) _media.Pick();       // toutes les 3 s : réévalue la meilleure session
             if (_tickCount % 20 == 0) _vol.CheckDevice();  // toutes les 5 s : périphérique audio par défaut
             if (_tickCount % 60 == 0 && S.HideWindowsBanners && _notif.Ok) BannerService.Apply(S); // nouvelles applis
             if (_tickCount % 120 == 0) VoiceReconnectTick(); // toutes les 30 s : reconnexion Discord
+            if (_pendingUpdate != null && _tickCount % 8 == 0) TryAutoInstall(); // mise à jour en attente du repos
+            if (_tickCount == 160 || _tickCount % 1200 == 0) IdleTrim(); // 40 s après le démarrage, puis toutes les 5 min
             if (_mode == Mode.Expanded && PanelMedia.Visibility == Visibility.Visible && _tickCount % 12 == 0) RefreshAppVolumes();
         }
 
@@ -819,6 +916,7 @@ namespace DynamicIsland
         {
             if (!_ready || _tabs == null) return;
             foreach (var kv in _tabs) kv.Value.Visibility = kv.Key == sender ? Visibility.Visible : Visibility.Collapsed;
+            LayoutTabs();
             OnTabShown();
         }
 
@@ -832,6 +930,8 @@ namespace DynamicIsland
             }
             if (PanelSystem.Visibility == Visibility.Visible) UpdateSystemUI();
             if (PanelInfo.Visibility == Visibility.Visible) UpdateClocks();
+            if (PanelMore.Visibility == Visibility.Visible) OnMoreShown();
+            ApplyTabHeight();
             UpdateBackdrop();
             UpdateFastTimer();
         }

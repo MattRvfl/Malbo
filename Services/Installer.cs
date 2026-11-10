@@ -179,17 +179,32 @@ namespace DynamicIsland
         public string ZipUrl;
         public string ExeUrl;
         public string Notes;
+        /// <summary>Empreinte SHA-256 attendue du fichier (manifeste). Vide = non vérifiée.</summary>
+        public string Sha256;
+        /// <summary>Le manifeste impose la mise à jour (correctif important).</summary>
+        public bool Mandatory;
+        /// <summary>« manifest » ou « release ».</summary>
+        public string Source;
+        /// <summary>Suffixe de pré-version (« alpha », « beta.2 »…), vide pour une version finale.</summary>
+        public string Pre = "";
+        public string Name => Version == null ? "?" : Version.ToString(3) + (string.IsNullOrEmpty(Pre) ? "" : "-" + Pre);
     }
 
-    /// <summary>Mises à jour via les releases GitHub (asset Malbo.exe de publish.ps1, ou à défaut un .zip).</summary>
+    /// <summary>
+    /// Mises à jour depuis le dépôt GitHub :
+    /// 1. manifeste <c>update.json</c> à la racine du dépôt (version, url, sha256, notes) — généré par publish.ps1 ;
+    /// 2. à défaut, la dernière release GitHub (asset Malbo.exe, ou un .zip).
+    /// Le fichier téléchargé est vérifié (SHA-256 du manifeste + en-tête d'exécutable) avant remplacement.
+    /// </summary>
     public static class Updater
     {
+        public const string ManifestFile = "update.json";
         static readonly HttpClient Http = CreateClient();
 
         static HttpClient CreateClient()
         {
             var h = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            h.DefaultRequestHeaders.UserAgent.ParseAdd("Malbo");
+            h.DefaultRequestHeaders.UserAgent.ParseAdd("Malbo-Updater");
             return h;
         }
 
@@ -204,28 +219,139 @@ namespace DynamicIsland
             }
         }
 
-        public static async Task<UpdateInfo> CheckAsync(string repo)
+        static string NormRepo(string repo)
+        {
+            repo = (repo ?? "").Trim().Trim('/');
+            const string gh = "https://github.com/";
+            if (repo.StartsWith(gh, StringComparison.OrdinalIgnoreCase)) repo = repo.Substring(gh.Length);
+            if (repo.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) repo = repo.Substring(0, repo.Length - 4);
+            var parts = repo.Split('/');
+            return parts.Length >= 2 ? parts[0] + "/" + parts[1] : null;
+        }
+
+        /// <summary>Suffixe de pré-version de l'exe en cours (« alpha », « beta »…), vide pour une version finale.</summary>
+        public static string CurrentPre
+        {
+            get
+            {
+                try
+                {
+                    var info = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "";
+                    return TryVersion(info, out _, out var pre) ? pre : "";
+                }
+                catch { return ""; }
+            }
+        }
+
+        public static string CurrentName => Current.ToString(3) + (CurrentPre.Length > 0 ? "-" + CurrentPre : "");
+
+        static bool TryVersion(string s, out Version v) => TryVersion(s, out v, out _);
+
+        /// <summary>Lit « v1.3.0-alpha+abc » → (1.3.0, "alpha").</summary>
+        static bool TryVersion(string s, out Version v, out string pre)
+        {
+            v = null; pre = "";
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            s = s.Trim().TrimStart('v', 'V');
+            int plus = s.IndexOf('+');
+            if (plus >= 0) s = s.Substring(0, plus);
+            int dash = s.IndexOf('-');
+            if (dash > 0) { pre = s.Substring(dash + 1).Trim().ToLowerInvariant(); s = s.Substring(0, dash); }
+            if (!Version.TryParse(s, out var p)) return false;
+            v = Three(p);
+            return true;
+        }
+
+        /// <summary>Compare deux versions. À numéro égal : alpha &lt; beta &lt; rc &lt; version finale (sans suffixe).</summary>
+        static int Cmp(Version v1, string p1, Version v2, string p2)
+        {
+            int c = v1.CompareTo(v2);
+            if (c != 0) return c;
+            p1 ??= ""; p2 ??= "";
+            if (p1.Length == 0 || p2.Length == 0) return p2.Length.CompareTo(p1.Length) == 0 ? 0 : (p1.Length == 0 ? 1 : -1);
+            return Math.Sign(string.CompareOrdinal(p1, p2));
+        }
+
+        static bool IsNewer(Version v, string pre) => Cmp(v, pre, Current, CurrentPre) > 0;
+
+        /// <summary>
+        /// Renvoie la mise à jour disponible, ou null si Malbo est à jour. Lève une exception si le dépôt est injoignable.
+        /// Avec <paramref name="beta"/>, les pré-versions (alpha, bêta) publiées sur GitHub sont aussi proposées.
+        /// </summary>
+        public static async Task<UpdateInfo> CheckAsync(string repo, bool beta = false)
+        {
+            repo = NormRepo(repo);
+            if (repo == null) throw new ArgumentException("Dépôt GitHub invalide (format attendu : propriétaire/nom).");
+
+            var fromManifest = await CheckManifestAsync(repo);
+            if (!beta)
+            {
+                if (fromManifest.Found) return fromManifest.Info;
+                return await CheckReleaseAsync(repo, false);
+            }
+            // Canal bêta : on garde la plus récente entre le manifeste (version finale) et les pré-versions GitHub.
+            UpdateInfo pre = null;
+            try { pre = await CheckReleaseAsync(repo, true); }
+            catch { if (fromManifest.Info == null) throw; }
+            var st = fromManifest.Info;
+            if (pre == null) return st;
+            if (st == null) return pre;
+            return Cmp(st.Version, st.Pre, pre.Version, pre.Pre) >= 0 ? st : pre;
+        }
+
+        static async Task<(bool Found, UpdateInfo Info)> CheckManifestAsync(string repo)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(repo)) return null;
-                repo = repo.Trim().Trim('/');
-                using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repo}/releases/latest");
-                req.Headers.Accept.ParseAdd("application/vnd.github+json");
-                using var resp = await Http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode) return null;
-                var json = await resp.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+                // HEAD = branche par défaut du dépôt ; le paramètre évite un manifeste périmé en cache.
+                var url = $"https://raw.githubusercontent.com/{repo}/HEAD/{ManifestFile}?t={DateTime.UtcNow.Ticks / TimeSpan.TicksPerMinute}";
+                using var resp = await Http.GetAsync(url);
+                if (!resp.IsSuccessStatusCode) return (false, null);
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                var r = doc.RootElement;
+                string Str(string n) => r.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
+                if (!TryVersion(Str("version"), out var ver, out var pre)) return (false, null);
+                if (!IsNewer(ver, pre)) return (true, null);
+
+                string dl = Str("url");
+                if (string.IsNullOrWhiteSpace(dl) || !dl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return (false, null);
+                bool mandatory = r.TryGetProperty("mandatory", out var m) && m.ValueKind == JsonValueKind.True;
+                var info = new UpdateInfo
+                {
+                    Version = ver, Pre = pre, Notes = Str("notes") ?? "", Sha256 = Str("sha256"), Mandatory = mandatory, Source = "manifest"
+                };
+                if (dl.Split('?')[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) info.ZipUrl = dl; else info.ExeUrl = dl;
+                return (true, info);
+            }
+            catch (Exception ex) when (ex is JsonException || ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                return (false, null); // pas de manifeste lisible : on tente les releases
+            }
+        }
+
+        static async Task<UpdateInfo> CheckReleaseAsync(string repo, bool includePre)
+        {
+            // /releases/latest ignore les pré-versions ; la liste complète les contient (la plus récente en premier).
+            var api = includePre ? $"https://api.github.com/repos/{repo}/releases?per_page=15" : $"https://api.github.com/repos/{repo}/releases/latest";
+            using var req = new HttpRequestMessage(HttpMethod.Get, api);
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+            using var resp = await Http.SendAsync(req);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null; // aucune release publiée
+            if ((int)resp.StatusCode == 403) throw new HttpRequestException("limite de l'API GitHub atteinte, réessaie plus tard.");
+            resp.EnsureSuccessStatusCode();
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+
+            UpdateInfo best = null;
+            var items = doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.EnumerateArray().ToList() : new System.Collections.Generic.List<JsonElement> { doc.RootElement };
+            foreach (var root in items)
+            {
+                if (root.TryGetProperty("draft", out var dr) && dr.ValueKind == JsonValueKind.True) continue;
                 string tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-                if (string.IsNullOrWhiteSpace(tag)) return null;
-                tag = tag.Trim().TrimStart('v', 'V');
-                if (!Version.TryParse(tag, out var ver)) return null;
-                ver = Three(ver);
-                if (ver <= Current) return null;
+                if (!TryVersion(tag, out var ver, out var pre) || !IsNewer(ver, pre)) continue;
+                if (best != null && Cmp(ver, pre, best.Version, best.Pre) <= 0) continue;
 
-                string zip = null, exe = null;
+                string zip = null, exe = null, sha = null;
                 if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var a in assets.EnumerateArray())
@@ -233,16 +359,59 @@ namespace DynamicIsland
                         string name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
                         string url = a.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
                         if (name == null || url == null) continue;
-                        if (exe == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe = url;
+                        if (exe == null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            exe = url;
+                            // GitHub publie l'empreinte de chaque fichier joint (« sha256:… ») : on la vérifie aussi.
+                            if (a.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String && dg.GetString().StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+                                sha = dg.GetString().Substring(7);
+                        }
                         else if (zip == null && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zip = url;
                     }
                 }
-                if (zip == null && exe == null) return null;
-
+                if (zip == null && exe == null) continue;
                 string notes = root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() : "";
-                return new UpdateInfo { Version = ver, ZipUrl = zip, ExeUrl = exe, Notes = notes };
+                best = new UpdateInfo { Version = ver, Pre = pre, ZipUrl = exe == null ? zip : null, ExeUrl = exe, Notes = notes, Sha256 = exe != null ? sha : null, Source = "release" };
             }
-            catch { return null; }
+            return best;
+        }
+
+        /// <summary>Télécharge dans un fichier temporaire en calculant le SHA-256 au passage, puis vérifie l'empreinte attendue.</summary>
+        static async Task DownloadVerifiedAsync(string url, string path, string expectedSha)
+        {
+            string part = path + ".part";
+            using (var resp = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            {
+                resp.EnsureSuccessStatusCode();
+                using var src = await resp.Content.ReadAsStreamAsync();
+                using var fs = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+                using var sha = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+                var buf = new byte[81920];
+                int n;
+                long total = 0;
+                while ((n = await src.ReadAsync(buf, 0, buf.Length)) > 0)
+                {
+                    sha.AppendData(buf, 0, n);
+                    await fs.WriteAsync(buf, 0, n);
+                    total += n;
+                }
+                if (total < 1024) throw new InvalidDataException("Fichier de mise à jour vide ou incomplet.");
+                var got = Convert.ToHexString(sha.GetHashAndReset());
+                if (!string.IsNullOrWhiteSpace(expectedSha) && !string.Equals(got, expectedSha.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    fs.Close();
+                    try { File.Delete(part); } catch { }
+                    throw new InvalidDataException("Empreinte SHA-256 incorrecte : téléchargement corrompu, mise à jour annulée.");
+                }
+            }
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(part, path);
+        }
+
+        static void EnsureExe(string path)
+        {
+            using var f = File.OpenRead(path);
+            if (f.ReadByte() != 'M' || f.ReadByte() != 'Z') throw new InvalidDataException("Le fichier téléchargé n'est pas un exécutable Windows.");
         }
 
         public static async Task ApplyAsync(UpdateInfo u)
@@ -256,12 +425,7 @@ namespace DynamicIsland
                 string zipPath = Path.Combine(tmp, $"Malbo-update-{tag}.zip");
                 string extractDir = Path.Combine(tmp, $"Malbo-update-{tag}");
 
-                using (var resp = await Http.GetAsync(u.ZipUrl, HttpCompletionOption.ResponseHeadersRead))
-                {
-                    resp.EnsureSuccessStatusCode();
-                    using var fs = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    await resp.Content.CopyToAsync(fs);
-                }
+                await DownloadVerifiedAsync(u.ZipUrl, zipPath, u.Sha256);
 
                 if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
                 ZipFile.ExtractToDirectory(zipPath, extractDir, true);
@@ -311,12 +475,8 @@ namespace DynamicIsland
             {
                 string tmp = Path.GetTempPath();
                 string newExe = Path.Combine(tmp, $"Malbo-update-{u.Version}.exe");
-                using (var resp = await Http.GetAsync(u.ExeUrl, HttpCompletionOption.ResponseHeadersRead))
-                {
-                    resp.EnsureSuccessStatusCode();
-                    using var fs = new FileStream(newExe, FileMode.Create, FileAccess.Write, FileShare.None);
-                    await resp.Content.CopyToAsync(fs);
-                }
+                await DownloadVerifiedAsync(u.ExeUrl, newExe, u.Sha256);
+                EnsureExe(newExe);
 
                 string target = Environment.ProcessPath;
                 int pid = Environment.ProcessId;

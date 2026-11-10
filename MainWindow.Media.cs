@@ -41,7 +41,7 @@ namespace DynamicIsland
                 if (!S.VolumeOsd) return;
                 ShowPeek(new PeekData
                 {
-                    Key = "osd", Glyph = m ? "\uE74F" : v < 0.01 ? "\uE992" : v < 0.34 ? "\uE993" : v < 0.67 ? "\uE994" : "\uE995",
+                    Key = "osd", Glyph = m ? "\uE45A" : v < 0.01 ? "\uE44E" : v < 0.34 ? "\uE44C" : v < 0.67 ? "\uE44A" : "\uE44A",
                     Title = m ? "Muet" : $"Volume  {Math.Round(v * 100)} %", Progress = m ? 0 : v,
                     Duration = TimeSpan.FromSeconds(1.6), Width = 300, Height = 48
                 });
@@ -67,7 +67,7 @@ namespace DynamicIsland
             MediaTitle.Text = st.HasMedia ? st.Title : "Rien en lecture";
             MediaArtist.Text = st.Artist;
             MediaApp.Text = st.HasMedia ? "via " + PrettyApp(st.AppId) : "";
-            PlayBtn.Content = st.IsPlaying ? "\uE769" : "\uE768";
+            PlayBtn.Content = st.IsPlaying ? "\uE39E" : "\uE3D0";
             MediaSlider.Maximum = Math.Max(1, st.Duration.TotalSeconds);
 
             if (st.Art != null)
@@ -76,7 +76,7 @@ namespace DynamicIsland
                 BigArt.Background = brush;
                 BigArtGlyph.Visibility = Visibility.Collapsed;
                 CompactArt.Background = brush;
-                if (S.AccentFromArt) Application.Current.Resources["Accent"] = new SolidColorBrush(AccentFrom(st.Art));
+                if (S.AccentFromArt) SetAccent(AccentFrom(st.Art));
             }
             else
             {
@@ -101,6 +101,7 @@ namespace DynamicIsland
             else LikeBtn.Visibility = PlaylistBtn.Visibility = Vis(IsSpotifyApi);
             UpdateShuffleRepeatUI();
             UpdateBackdrop();
+            RecordHistory(st);
 
             // Petit "peek" quand un nouveau morceau démarre
             if (S.TrackPeek && st.HasMedia && st.IsPlaying && st.Key != _peekedKey && _mode != Mode.Expanded)
@@ -108,7 +109,7 @@ namespace DynamicIsland
                 _peekedKey = st.Key;
                 ShowPeek(new PeekData
                 {
-                    Key = "track", Image = st.Art, Glyph = "\uE8D6", Title = st.Title, Body = st.Artist,
+                    Key = "track", Image = st.Art, Glyph = "\uE340", Title = st.Title, Body = st.Artist,
                     Duration = TimeSpan.FromSeconds(3), Width = 380, Height = 68,
                     OnClick = () => { Expand(); TabMedia.IsChecked = true; }
                 });
@@ -177,7 +178,8 @@ namespace DynamicIsland
         void UpdateLikeUI()
         {
             bool liked = _liked == true;
-            LikeBtn.Content = liked ? "\uEB52" : "\uEB51";
+            LikeBtn.Content = Ico.Heart;
+            LikeBtn.FontFamily = (FontFamily)FindResource(liked ? "IconsFill" : "Icons"); // cœur plein quand le titre est aimé
             if (liked) LikeBtn.Foreground = LikeRed;
             else LikeBtn.SetResourceReference(ForegroundProperty, "Fg");
             LikeBtn.ToolTip = liked ? "Retirer des titres likés" : "Ajouter aux titres likés";
@@ -200,7 +202,7 @@ namespace DynamicIsland
             }
             ShuffleBtn.Opacity = shuffle ? 1 : 0.45;
             RepeatBtn.Opacity = repeat != 0 ? 1 : 0.45;
-            RepeatBtn.Content = repeat == 1 ? "\uE8ED" : "\uE8EE";
+            RepeatBtn.Content = repeat == 1 ? "\uE3F8" : "\uE3F6";
             RepeatBtn.ToolTip = repeat == 1 ? "Répéter le morceau" : repeat == 2 ? "Répéter la liste" : "Répéter";
         }
 
@@ -287,7 +289,7 @@ namespace DynamicIsland
                             try { ok = await _spotify.AddToPlaylistAsync(pid, uri); } catch (Exception ex) { App.Log(ex); }
                             ShowPeek(new PeekData
                             {
-                                Key = "alert", Glyph = "\uECC8",
+                                Key = "alert", Glyph = "\uE6AA",
                                 Title = ok ? $"Ajouté à {pname}" : $"Impossible d'ajouter à {pname}",
                                 Body = _media.State.Title,
                                 Duration = TimeSpan.FromSeconds(2.5), Width = 360, Height = 68
@@ -356,6 +358,34 @@ namespace DynamicIsland
                 for (int i = 0; i < _lyricBlocks.Count; i++) StyleLine(i, false);
                 Dispatcher.BeginInvoke(new Action(ScrollLyrics), System.Windows.Threading.DispatcherPriority.Loaded);
             }
+            if (S.TranslateLyrics) _ = TranslateLyricsAsync(key, res);
+        }
+
+        readonly TranslateService _translate = new();
+
+        /// <summary>Ajoute la traduction sous chaque ligne (plus petite, atténuée). Sans effet si les paroles sont déjà dans la langue voulue.</summary>
+        async Task TranslateLyricsAsync(string key, List<LyricLine> lines)
+        {
+            try
+            {
+                var lang = string.IsNullOrWhiteSpace(S.TranslateTo) ? "fr" : S.TranslateTo.Trim().ToLowerInvariant();
+                var tr = await _translate.LinesAsync(key, lines.Select(l => l.Text ?? "").ToList(), lang);
+                if (tr == null || key != _lyricKey || _lines != lines) return;
+                for (int i = 0; i < _lyricBlocks.Count && i < tr.Length; i++)
+                {
+                    var t = tr[i];
+                    var orig = lines[i].Text;
+                    if (string.IsNullOrWhiteSpace(t) || string.IsNullOrWhiteSpace(orig) || string.Equals(t, orig.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                    var tb = _lyricBlocks[i];
+                    tb.Inlines.Clear();
+                    tb.Inlines.Add(new System.Windows.Documents.Run(orig));
+                    tb.Inlines.Add(new System.Windows.Documents.LineBreak());
+                    tb.Inlines.Add(new System.Windows.Documents.Run(t) { FontSize = 12, FontWeight = FontWeights.Normal });
+                }
+                LyricsStatus.Text += " · traduites";
+                if (_lyricsSynced) Dispatcher.BeginInvoke(new Action(ScrollLyrics), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+            catch (Exception ex) { App.Log(ex); }
         }
 
         /// <summary>Opacité, échelle et flou d'une ligne selon sa distance à la ligne courante.</summary>
@@ -521,9 +551,11 @@ namespace DynamicIsland
         void RefreshAppVolumes()
         {
             var cur = AppVolList.ItemsSource as List<AppVolumeItem>;
-            var list = _vol.GetSessions();
-            if (cur != null && cur.Select(x => x.Pid).SequenceEqual(list.Select(x => x.Pid))) return;
+            var list = _vol.GetSessions(onlyIfChanged: cur != null);
+            if (list == null) return; // rien n'a changé
+            if (cur != null && cur.Select(x => x.Pid).SequenceEqual(list.Select(x => x.Pid))) { list.ForEach(x => x.Dispose()); return; }
             AppVolList.ItemsSource = list;
+            cur?.ForEach(x => x.Dispose());
         }
 
         /// <summary>Couleur dominante (saturée) de la pochette.</summary>

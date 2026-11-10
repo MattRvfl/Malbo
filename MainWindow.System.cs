@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,18 +17,18 @@ namespace DynamicIsland
 
         void InitSystem()
         {
-            _cpu = MakeStat("\uE950", "Processeur", true);
-            _ram = MakeStat("\uE964", "Mémoire", true);
-            _gpu = MakeStat("\uE7F8", "GPU", true);
-            _temp = MakeStat("\uE9CA", "Température", false);
-            _net = MakeStat("\uE774", "Réseau", false);
-            _bat = MakeStat("\uE83F", "Batterie", true);
-            _wifi = MakeStat("\uE701", "Wi-Fi", true);
-            _priv = MakeStat("\uE720", "Micro / Caméra", false);
+            _cpu = MakeStat("\uE610", "Processeur", true);
+            _ram = MakeStat("\uE9C4", "Mémoire", true);
+            _gpu = MakeStat("\uE612", "GPU", true);
+            _temp = MakeStat("\uE5C6", "Température", false);
+            _net = MakeStat("\uE288", "Réseau", false);
+            _bat = MakeStat("\uE0C2", "Batterie", true);
+            _wifi = MakeStat("\uE4EA", "Wi-Fi", true);
+            _priv = MakeStat("\uE326", "Micro / Caméra", false);
             _sys.BrightnessChanged += b => Dispatcher.InvokeAsync(() =>
             {
                 if (!S.BrightnessOsd) return;
-                ShowPeek(new PeekData { Key = "osd", Glyph = "\uE706", Title = $"Luminosité  {b} %", Progress = b / 100.0, Duration = TimeSpan.FromSeconds(1.6), Width = 300, Height = 48 });
+                ShowPeek(new PeekData { Key = "osd", Glyph = "\uE472", Title = $"Luminosité  {b} %", Progress = b / 100.0, Duration = TimeSpan.FromSeconds(1.6), Width = 300, Height = 48 });
             });
             _sys.Start();
         }
@@ -70,7 +71,7 @@ namespace DynamicIsland
             _net.Sub.Text = "↑ " + Speed(s.Up);
             if (s.HasBattery)
             {
-                _bat.Val.Text = $"{s.Battery} %" + (s.Charging ? " ⚡" : "");
+                _bat.Val.Text = $"{s.Battery} %" ;
                 _bat.Bar.Value = s.Battery;
                 _bat.Sub.Text = s.Charging ? "En charge" : s.BatteryMinutes > 0 ? $"≈ {s.BatteryMinutes / 60} h {s.BatteryMinutes % 60:00} restantes" : "Sur batterie";
             }
@@ -79,7 +80,7 @@ namespace DynamicIsland
             _wifi.Bar.Value = Math.Max(0, s.WifiSignal);
             _wifi.Sub.Text = s.WifiSignal >= 0 ? $"Signal {s.WifiSignal} %" : "";
             _priv.Val.Text = s.Mic || s.Cam ? (s.Mic && s.Cam ? "Les deux" : s.Mic ? "Micro" : "Caméra") : "Inactifs";
-            _priv.Sub.Text = s.Mic || s.Cam ? "par " + string.Join(", ", new[] { s.Mic ? s.MicApp : null, s.Cam ? s.CamApp : null }.Where(x => x != null).Distinct()) : "Personne n'écoute 👌";
+            _priv.Sub.Text = s.Mic || s.Cam ? "par " + string.Join(", ", new[] { s.Mic ? s.MicApp : null, s.Cam ? s.CamApp : null }.Where(x => x != null).Distinct()) : "Aucune appli ne les utilise";
 
             DiskList.ItemsSource = s.Disks;
             BtList.ItemsSource = s.Bluetooth;
@@ -89,6 +90,35 @@ namespace DynamicIsland
             DlEmpty.Visibility = dl.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        readonly HashSet<string> _alerted = new();
+        int _hotSeconds;
+
+        /// <summary>Alertes utiles, une seule fois par problème : disque presque plein, surchauffe, batterie d'un appareil Bluetooth.</summary>
+        void SystemAlerts(SysStats s)
+        {
+            foreach (var d in s.Disks)
+            {
+                // Sub = « 97 % utilisé sur 476 Go »
+                var m = System.Text.RegularExpressions.Regex.Match(d.Sub ?? "", @"^(\d+)\s*%");
+                if (!m.Success || !int.TryParse(m.Groups[1].Value, out int used)) continue;
+                var key = "disk:" + d.Left;
+                if (used >= 95) { if (_alerted.Add(key)) Alert("Disque presque plein", $"{d.Left.Trim()} : {d.Right}", "\uE2A0"); }
+                else if (used < 92) _alerted.Remove(key);
+            }
+
+            if (s.Temp >= 90) { if (++_hotSeconds == 20 && _alerted.Add("temp")) Alert("Température élevée", $"{s.Temp:0} °C depuis 20 s", "\uE5C6"); }
+            else { _hotSeconds = 0; if (s.Temp < 80) _alerted.Remove("temp"); }
+
+            foreach (var b in s.Bluetooth)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(b.Right ?? "", @"^(\d+)\s*%");
+                if (!m.Success || !int.TryParse(m.Groups[1].Value, out int lvl)) continue;
+                var key = "bt:" + b.Left;
+                if (lvl <= 15) { if (_alerted.Add(key)) Alert("Batterie faible", $"{b.Left} : {lvl} %", "\uE0DA"); }
+                else if (lvl > 25) _alerted.Remove(key);
+            }
+        }
+
         /// <summary>Événements système à pousser dans l'île (chargeur, batterie faible, Bluetooth).</summary>
         void SystemSecond()
         {
@@ -96,7 +126,7 @@ namespace DynamicIsland
             if (s.HasBattery && s.Battery >= 0)
             {
                 if (_lastCharging.HasValue && _lastCharging != s.Charging)
-                    ShowPeek(new PeekData { Key = "alert", Glyph = s.Charging ? "\uEA93" : "\uE83F", Title = s.Charging ? "En charge" : "Sur batterie", Body = $"{s.Battery} %", Progress = s.Battery / 100.0, Duration = TimeSpan.FromSeconds(2.5), Width = 300, Height = 68 });
+                    ShowPeek(new PeekData { Key = "alert", Glyph = s.Charging ? "\uE0BA" : "\uE0C2", Title = s.Charging ? "En charge" : "Sur batterie", Body = $"{s.Battery} %" + (!s.Charging && s.BatteryMinutes > 0 ? $" · ≈ {s.BatteryMinutes / 60} h {s.BatteryMinutes % 60:00} restantes" : ""), Progress = s.Battery / 100.0, Duration = TimeSpan.FromSeconds(2.5), Width = 300, Height = 68 });
                 _lastCharging = s.Charging;
                 if (s.Charging) _lastBatWarn = 101;
                 else foreach (var lvl in new[] { 20, 10, 5 })
@@ -104,18 +134,20 @@ namespace DynamicIsland
                         if (s.Battery <= lvl && _lastBatWarn > lvl)
                         {
                             _lastBatWarn = lvl;
-                            Alert("Batterie faible", $"Plus que {s.Battery} %. Branche le chargeur.", "\uE850");
+                            Alert("Batterie faible", $"Plus que {s.Battery} %. Branche le chargeur.", "\uE0C8");
                             break;
                         }
                     }
             }
+
+            if (S.SystemAlerts) SystemAlerts(s);
 
             var names = string.Join("|", s.Bluetooth.Select(b => b.Left).OrderBy(x => x));
             if (_lastBtNames != null && names != _lastBtNames)
             {
                 var prev = _lastBtNames.Split('|', StringSplitOptions.RemoveEmptyEntries);
                 foreach (var b in s.Bluetooth.Where(b => !prev.Contains(b.Left)))
-                    ShowPeek(new PeekData { Key = "alert", Glyph = "\uE702", Title = b.Left, Body = "Connecté · " + b.Right, Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
+                    ShowPeek(new PeekData { Key = "alert", Glyph = "\uE0DA", Title = b.Left, Body = "Connecté · " + b.Right, Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
             }
             _lastBtNames = names;
         }

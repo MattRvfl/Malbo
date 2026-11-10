@@ -31,8 +31,18 @@ namespace DynamicIsland
     {
         const int OpHandshake = 0, OpFrame = 1, OpClose = 2, OpPing = 3, OpPong = 4;
         const string TokenUrl = "https://discord.com/api/oauth2/token";
-        static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
-        static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(120);
+        static readonly HttpClient Http = CreateHttp();
+        static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(15);
+        // AUTHORIZE attend que l'utilisateur clique « Autoriser » dans Discord.
+        static readonly TimeSpan AuthorizeTimeout = TimeSpan.FromSeconds(120);
+
+        static HttpClient CreateHttp()
+        {
+            // Sans User-Agent, Discord (Cloudflare) peut répondre par une page HTML au lieu du JSON attendu.
+            var h = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            h.DefaultRequestHeaders.UserAgent.ParseAdd("Malbo/" + Updater.Current + " (+https://github.com/" + AppSettings.DefaultRepo + ")");
+            return h;
+        }
         static readonly string[] ChannelEvents = { "VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE", "SPEAKING_START", "SPEAKING_STOP" };
 
         static AppSettings S => App.Settings;
@@ -48,10 +58,13 @@ namespace DynamicIsland
         string _channelId;
         string _selfId;
         int _refreshQueued;
-        volatile bool _connected, _busy;
+        volatile bool _connected;
+        int _busy;
 
         public bool Connected => _connected;
-        public bool Busy => _busy;
+        public bool Busy => Volatile.Read(ref _busy) == 1;
+        /// <summary>Dernière erreur de connexion (affichée dans les réglages, utile au diagnostic).</summary>
+        public string LastError { get; private set; }
         public bool InChannel { get { lock (_lock) return _connected && _channelId != null; } }
         public string ChannelName { get; private set; }
         public bool SelfMuted { get; private set; }
@@ -63,20 +76,38 @@ namespace DynamicIsland
         // ---------- Connexion ----------
         public async Task<string> ConnectAsync(bool interactive)
         {
-            if (_busy) return "Connexion à Discord déjà en cours…";
             if (_connected) return null;
-            _busy = true;
+            if (Interlocked.Exchange(ref _busy, 1) == 1) return "Connexion à Discord déjà en cours…";
+            try
+            {
+                var err = await ConnectCoreAsync(interactive);
+                LastError = err;
+                return err;
+            }
+            finally { Volatile.Write(ref _busy, 0); }
+        }
+
+        async Task<string> ConnectCoreAsync(bool interactive)
+        {
+            NamedPipeClientStream pipe = null;
             try
             {
                 var clientId = S.DiscordClientId?.Trim();
                 if (string.IsNullOrEmpty(clientId)) return "Renseigne d'abord le Client ID Discord.";
+                if (!clientId.All(char.IsDigit)) return "Le Client ID Discord doit être l'« Application ID » (uniquement des chiffres).";
                 if (!interactive && string.IsNullOrEmpty(S.DiscordRefresh)) return "Reconnexion requise : connecte Discord depuis les réglages.";
+                // Sans secret, l'échange du code échoue APRÈS la fenêtre d'autorisation : on prévient tout de suite.
+                if (string.IsNullOrWhiteSpace(S.DiscordSecret)) return "Renseigne le Client Secret (portail développeur › OAuth2 › Reset Secret).";
 
-                var pipe = await OpenPipeAsync();
-                if (pipe == null) return "Discord n'est pas lancé (aucun canal IPC trouvé).";
+                pipe = await OpenPipeAsync();
+                if (pipe == null) return "Discord n'est pas lancé (aucun canal IPC trouvé). Ouvre l'appli Discord de bureau, pas la version navigateur.";
 
                 var cts = new CancellationTokenSource();
-                lock (_lock) { _pipe = pipe; _cts = cts; }
+                lock (_lock)
+                {
+                    try { _cts?.Cancel(); } catch { }
+                    _pipe = pipe; _cts = cts;
+                }
 
                 // Handshake + READY
                 await WriteFrameAsync(pipe, OpHandshake, new { v = 1, client_id = clientId });
@@ -85,60 +116,57 @@ namespace DynamicIsland
 
                 _ = Task.Run(() => ReadLoopAsync(pipe, cts.Token));
 
-                // Authentification
+                // Authentification : jeton rafraîchi si possible, sinon fenêtre d'autorisation dans Discord.
                 string access = null;
+                bool fromRefresh = false;
                 if (!string.IsNullOrEmpty(S.DiscordRefresh))
                 {
-                    var (tok, err) = await TokenAsync(new Dictionary<string, string>
+                    var (tok, terr) = await TokenAsync(new Dictionary<string, string>
                     {
                         ["grant_type"] = "refresh_token",
                         ["refresh_token"] = S.DiscordRefresh,
                         ["client_id"] = clientId,
-                        ["client_secret"] = S.DiscordSecret ?? ""
+                        ["client_secret"] = S.DiscordSecret.Trim()
                     });
                     access = tok;
+                    fromRefresh = tok != null;
                     if (access == null && !interactive)
                     {
                         Cleanup(pipe, false);
-                        return "Reconnexion requise : " + err;
+                        return "Reconnexion requise : " + terr;
                     }
                 }
                 if (access == null)
                 {
-                    string code;
-                    // Discord refuse désormais le scope générique "rpc" (invalid_scope) : on ne demande que les scopes vocaux.
-                    try
-                    {
-                        code = await AuthorizeAsync(clientId, new[] { "rpc.voice.read", "rpc.voice.write", "identify" });
-                    }
-                    catch (InvalidOperationException ex) when (ex.Message.Contains("scope"))
-                    {
-                        code = await AuthorizeAsync(clientId, new[] { "rpc.voice.read", "identify" });
-                    }
-                    if (string.IsNullOrEmpty(code)) { Cleanup(pipe, false); return "Discord n'a pas renvoyé de code d'autorisation."; }
-
-                    var form = new Dictionary<string, string>
-                    {
-                        ["grant_type"] = "authorization_code",
-                        ["code"] = code,
-                        ["client_id"] = clientId,
-                        ["client_secret"] = S.DiscordSecret ?? ""
-                    };
-                    string err = null;
-                    if (!string.IsNullOrEmpty(S.DiscordRedirect))
-                    {
-                        form["redirect_uri"] = S.DiscordRedirect;
-                        (access, err) = await TokenAsync(form);
-                        form.Remove("redirect_uri");
-                    }
-                    if (access == null) (access, err) = await TokenAsync(form);
-                    if (access == null) { Cleanup(pipe, false); return "Échange du jeton Discord refusé : " + err; }
+                    var (tok, aerr) = await AuthorizeAndExchangeAsync(clientId);
+                    if (tok == null) { Cleanup(pipe, false); return aerr; }
+                    access = tok;
                 }
 
-                var auth = await CommandAsync("AUTHENTICATE", new { access_token = access });
+                JsonElement auth;
+                try { auth = await CommandAsync("AUTHENTICATE", new { access_token = access }); }
+                catch (InvalidOperationException ex) when (fromRefresh && interactive)
+                {
+                    // Jeton rafraîchi refusé (scopes changés, appli régénérée…) : on repart d'une autorisation neuve.
+                    App.Log(ex);
+                    S.DiscordRefresh = ""; S.Save();
+                    var (tok, aerr) = await AuthorizeAndExchangeAsync(clientId);
+                    if (tok == null) { Cleanup(pipe, false); return aerr; }
+                    auth = await CommandAsync("AUTHENTICATE", new { access_token = tok });
+                }
+                catch (InvalidOperationException) when (fromRefresh)
+                {
+                    S.DiscordRefresh = ""; S.Save();
+                    throw;
+                }
                 try { _selfId = auth.GetProperty("user").GetProperty("id").GetString(); } catch { _selfId = null; }
 
-                _connected = true;
+                // Discord a pu fermer le canal pendant l'authentification : ne jamais se croire connecté sans pipe.
+                lock (_lock)
+                {
+                    if (_pipe != pipe) return "Discord a fermé la connexion pendant l'authentification. Réessaie.";
+                    _connected = true;
+                }
                 try { await CommandAsync("SUBSCRIBE", new { }, "VOICE_CHANNEL_SELECT"); } catch (Exception ex) { App.Log(ex); }
                 await RefreshChannelAsync();
                 return null;
@@ -146,19 +174,68 @@ namespace DynamicIsland
             catch (Exception ex)
             {
                 App.Log(ex);
-                NamedPipeClientStream p; lock (_lock) p = _pipe;
-                if (p != null) Cleanup(p, true);
-                var msg = ex is TimeoutException ? "Discord n'a pas répondu à temps."
-                        : ex.Message.Contains("invalid_scope") ? "Discord réserve la lecture du vocal aux applis qu'il a approuvées. Pas d'inquiétude : Malbo détecte tes appels Discord en local, sans connexion."
-                        : ex.Message;
-                return "Connexion à Discord impossible : " + msg;
+                if (pipe != null) Cleanup(pipe, true);
+                return "Connexion à Discord impossible : " + Explain(ex);
             }
-            finally { _busy = false; }
+        }
+
+        /// <summary>Traduit les erreurs RPC/OAuth de Discord en messages compréhensibles.</summary>
+        static string Explain(Exception ex)
+        {
+            var m = ex.Message ?? "";
+            if (ex is TimeoutException || ex is OperationCanceledException) return "Discord n'a pas répondu à temps (fenêtre d'autorisation ignorée ?).";
+            if (m.Contains("invalid_scope") || m.Contains("(4006)"))
+                return "Discord réserve la lecture du vocal aux applis approuvées, à leur propriétaire et aux testeurs. "
+                     + "Utilise une appli que TU as créée, avec ton compte Discord (ou ajoute-toi dans App Testers). "
+                     + "Sinon, Malbo détecte quand même tes appels Discord en local.";
+            // Codes RPC : 4007 Client ID invalide, 4009 jeton invalide, 5000 erreur OAuth2.
+            if (m.Contains("(4007)") || m.Contains("Invalid Client ID", StringComparison.OrdinalIgnoreCase))
+                return "Client ID refusé : copie l'« Application ID » de ton appli sur discord.com/developers.";
+            if (m.Contains("(4009)") || m.Contains("Invalid token", StringComparison.OrdinalIgnoreCase)) return "jeton refusé, reconnecte Discord depuis les réglages.";
+            if (m.Contains("denied", StringComparison.OrdinalIgnoreCase) || m.Contains("cancel", StringComparison.OrdinalIgnoreCase)) return "autorisation refusée dans Discord.";
+            if (m.Contains("redirect", StringComparison.OrdinalIgnoreCase)) return $"ajoute « {S.DiscordRedirect} » dans OAuth2 › Redirects de ton appli Discord.";
+            if (ex is IOException) return "le canal avec Discord a été fermé (Discord redémarré ?).";
+            return m;
+        }
+
+        async Task<(string Access, string Error)> AuthorizeAndExchangeAsync(string clientId)
+        {
+            string code;
+            // Discord refuse désormais le scope générique "rpc" (invalid_scope) : on ne demande que les scopes vocaux.
+            try
+            {
+                code = await AuthorizeAsync(clientId, new[] { "rpc.voice.read", "rpc.voice.write", "identify" });
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("scope"))
+            {
+                code = await AuthorizeAsync(clientId, new[] { "rpc.voice.read", "identify" });
+            }
+            if (string.IsNullOrEmpty(code)) return (null, "Discord n'a pas renvoyé de code d'autorisation.");
+
+            var form = new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["code"] = code,
+                ["client_id"] = clientId,
+                ["client_secret"] = (S.DiscordSecret ?? "").Trim()
+            };
+            string access = null, err = null;
+            if (!string.IsNullOrEmpty(S.DiscordRedirect))
+            {
+                form["redirect_uri"] = S.DiscordRedirect.Trim();
+                (access, err) = await TokenAsync(form);
+                form.Remove("redirect_uri");
+            }
+            if (access == null) (access, err) = await TokenAsync(form);
+            if (access != null) return (access, null);
+            if (err != null && err.Contains("invalid_client")) err = "Client Secret incorrect (régénère-le dans OAuth2 et recolle-le).";
+            else if (err != null && err.Contains("redirect_uri")) err = $"ajoute exactement « {S.DiscordRedirect} » dans OAuth2 › Redirects de ton appli.";
+            return (null, "Échange du jeton Discord refusé : " + err);
         }
 
         async Task<string> AuthorizeAsync(string clientId, string[] scopes)
         {
-            var data = await CommandAsync("AUTHORIZE", new { client_id = clientId, scopes });
+            var data = await CommandAsync("AUTHORIZE", new { client_id = clientId, scopes }, timeout: AuthorizeTimeout);
             return data.ValueKind == JsonValueKind.Object && data.TryGetProperty("code", out var c) ? c.GetString() : null;
         }
 
@@ -169,7 +246,15 @@ namespace DynamicIsland
                 using var content = new FormUrlEncodedContent(form);
                 using var resp = await Http.PostAsync(TokenUrl, content);
                 var body = await resp.Content.ReadAsStringAsync();
-                using var j = JsonDocument.Parse(body);
+                JsonDocument j;
+                try { j = JsonDocument.Parse(body); }
+                catch (JsonException)
+                {
+                    // Page HTML (Cloudflare, limite de débit…) au lieu du JSON : message lisible plutôt qu'une erreur de parsing.
+                    return (null, (int)resp.StatusCode == 429 ? "trop de tentatives, réessaie dans quelques minutes."
+                                 : $"réponse inattendue de Discord (HTTP {(int)resp.StatusCode}).");
+                }
+                using var _j = j;
                 var r = j.RootElement;
                 if (!resp.IsSuccessStatusCode || !r.TryGetProperty("access_token", out var at))
                 {
@@ -194,12 +279,26 @@ namespace DynamicIsland
 
         static async Task<NamedPipeClientStream> OpenPipeAsync()
         {
-            for (int i = 0; i < 10; i++)
+            // On liste d'abord les canaux existants : si Discord est fermé, on échoue tout de suite
+            // au lieu d'attendre 10 × 400 ms (la reconnexion tourne toutes les 30 s).
+            var names = new List<string>();
+            try
             {
-                var p = new NamedPipeClientStream(".", "discord-ipc-" + i, PipeDirection.InOut, PipeOptions.Asynchronous);
+                foreach (var f in Directory.EnumerateFiles(@"\\.\pipe\", "discord-ipc-*"))
+                    names.Add(Path.GetFileName(f));
+                names.Sort(StringComparer.Ordinal);
+            }
+            catch { }
+            bool listed = names.Count > 0;
+            if (!listed) for (int i = 0; i < 10; i++) names.Add("discord-ipc-" + i);
+
+            foreach (var name in names)
+            {
+                var p = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
                 try
                 {
-                    using var t = new CancellationTokenSource(400);
+                    // Un canal listé existe : on lui laisse le temps de répondre s'il est occupé.
+                    using var t = new CancellationTokenSource(listed ? 2000 : 250);
                     await p.ConnectAsync(t.Token);
                     return p;
                 }
@@ -214,13 +313,19 @@ namespace DynamicIsland
             using var t = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (true)
             {
-                var (op, json) = await ReadFrameAsync(pipe, t.Token);
+                int op; byte[] json;
+                try { (op, json) = await ReadFrameAsync(pipe, t.Token); }
+                catch (OperationCanceledException) { return "Discord n'a pas répondu au handshake (redémarre Discord)."; }
+                catch (Exception ex) when (ex is IOException || ex is EndOfStreamException) { return "Discord a fermé la connexion (Client ID invalide ?)."; }
                 if (op == OpPing) { await WriteRawAsync(pipe, OpPong, json); continue; }
                 using var doc = JsonDocument.Parse(json);
                 var r = doc.RootElement;
                 if (op == OpClose)
                 {
                     var m = r.TryGetProperty("message", out var mm) ? mm.GetString() : "connexion fermée";
+                    var code = r.TryGetProperty("code", out var cc) ? cc.ToString() : "";
+                    if (code == "4000" || m.Contains("Client ID", StringComparison.OrdinalIgnoreCase))
+                        return "Discord a refusé le Client ID : copie l'« Application ID » de ton appli sur discord.com/developers.";
                     return "Discord a refusé la connexion : " + m;
                 }
                 if (op == OpFrame && r.TryGetProperty("evt", out var evt) && evt.ValueKind == JsonValueKind.String)
@@ -237,7 +342,10 @@ namespace DynamicIsland
             try
             {
                 if (r.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object && d.TryGetProperty("message", out var m))
-                    return m.GetString();
+                {
+                    var code = d.TryGetProperty("code", out var c) ? c.ToString() : null;
+                    return code != null ? $"{m.GetString()} ({code})" : m.GetString();
+                }
             }
             catch { }
             return "erreur inconnue";
@@ -274,7 +382,7 @@ namespace DynamicIsland
             finally { _writeLock.Release(); }
         }
 
-        async Task<JsonElement> CommandAsync(string cmd, object args, string evt = null)
+        async Task<JsonElement> CommandAsync(string cmd, object args, string evt = null, TimeSpan? timeout = null)
         {
             NamedPipeClientStream pipe; lock (_lock) pipe = _pipe;
             if (pipe == null) throw new IOException("Discord n'est pas connecté.");
@@ -286,9 +394,8 @@ namespace DynamicIsland
                 var payload = new Dictionary<string, object> { ["cmd"] = cmd, ["args"] = args, ["nonce"] = nonce };
                 if (evt != null) payload["evt"] = evt;
                 await WriteFrameAsync(pipe, OpFrame, payload);
-                var done = await Task.WhenAny(tcs.Task, Task.Delay(CommandTimeout));
-                if (done != tcs.Task) throw new TimeoutException("Délai dépassé pour " + cmd);
-                return await tcs.Task;
+                // WaitAsync libère son minuteur dès la réponse (Task.Delay laissait un timer vivant 2 min par commande).
+                return await tcs.Task.WaitAsync(timeout ?? CommandTimeout);
             }
             finally { _pending.TryRemove(nonce, out _); }
         }
@@ -301,7 +408,11 @@ namespace DynamicIsland
                 {
                     var (op, json) = await ReadFrameAsync(pipe, ct);
                     if (op == OpPing) { await WriteRawAsync(pipe, OpPong, json); continue; }
-                    if (op == OpClose) break;
+                    if (op == OpClose)
+                    {
+                        try { App.Log(new IOException("Discord a fermé le canal RPC : " + Encoding.UTF8.GetString(json))); } catch { }
+                        break;
+                    }
                     if (op != OpFrame) continue;
 
                     JsonElement root;

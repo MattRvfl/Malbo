@@ -30,17 +30,20 @@ namespace DynamicIsland
             }
             catch (Exception ex) { App.Log(ex); }
 
-            if (S.AutoUpdate && !string.IsNullOrWhiteSpace(S.UpdateRepo))
+            // Vérification 20 s après le démarrage, puis toutes les 6 h (Malbo reste ouvert des jours entiers).
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            _updateTimer.Tick += async (s, e) =>
             {
-                var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-                t.Tick += async (s, e) =>
-                {
-                    t.Stop();
-                    try { await CheckUpdateAsync(false); } catch (Exception ex) { App.Log(ex); }
-                };
-                t.Start();
-            }
+                _updateTimer.Interval = TimeSpan.FromHours(6);
+                if (!S.AutoUpdate || string.IsNullOrWhiteSpace(S.UpdateRepo)) return;
+                try { await CheckUpdateAsync(false); } catch (Exception ex) { App.Log(ex); }
+            };
+            _updateTimer.Start();
         }
+
+        DispatcherTimer _updateTimer;
+        UpdateInfo _pendingUpdate;
+        bool _updating;
 
         // ================== Calcul ==================
         void CalcInput_KeyUp(object sender, KeyEventArgs e)
@@ -59,7 +62,7 @@ namespace DynamicIsland
             {
                 try { r = await Calc.EvaluateAsync(input); } catch (Exception ex) { App.Log(ex); }
             }
-            if (seq == _calcSeq) CalcResult.Text = r ?? "";
+            if (seq == _calcSeq) CalcResult.Text = r ?? LaunchHint(input) ?? "";
             return r;
         }
 
@@ -68,6 +71,7 @@ namespace DynamicIsland
             var input = (CalcInput.Text ?? "").Trim();
             if (input.Length == 0) return;
             var r = await EvalCalc();
+            if (LaunchCommit(input, !string.IsNullOrEmpty(r))) return; // minuteur nommé (« 15 min thé ») ou appli à ouvrir
             if (string.IsNullOrEmpty(r)) return;
             if (_calcHist.Count > 0 && _calcHist[0].Left == input && _calcHist[0].Right == r) return;
             _calcHist.Insert(0, new InfoRow { Left = input, Right = r });
@@ -87,7 +91,7 @@ namespace DynamicIsland
             e.Handled = true;
             if (_mode != Mode.Expanded)
             {
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE8C8", Title = "Copié", Body = t, Duration = TimeSpan.FromSeconds(1.5), Width = 260, Height = 48 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE1CA", Title = "Copié", Body = t, Duration = TimeSpan.FromSeconds(1.5), Width = 260, Height = 48 });
                 return;
             }
             // île ouverte : les peeks attendraient la fermeture → retour visuel sur place
@@ -163,7 +167,7 @@ namespace DynamicIsland
             {
                 var g = new TextBlock
                 {
-                    Text = IsWebUrl(target) ? "\uE774" : target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ? "\uE713" : "\uE8B7",
+                    Text = IsWebUrl(target) ? "\uE288" : target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ? "\uE270" : "\uE24A",
                     FontFamily = (FontFamily)FindResource("Icons"), FontSize = 24, Height = 30,
                     HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center
                 };
@@ -248,11 +252,11 @@ namespace DynamicIsland
         void BuildPower()
         {
             PowerHost.Children.Clear();
-            AddPower("\uE72E", "Verrouiller", false, AppLauncher.Lock);
-            AddPower("\uE708", "Veille", true, AppLauncher.Sleep);
-            AddPower("\uE777", "Redémarrer", true, AppLauncher.Restart);
-            AddPower("\uE7E8", "Éteindre", true, AppLauncher.Shutdown);
-            AddPower("\uF3B1", "Déconnexion", true, AppLauncher.Logoff);
+            AddPower("\uE2FA", "Verrouiller", false, AppLauncher.Lock);
+            AddPower("\uE330", "Veille", true, AppLauncher.Sleep);
+            AddPower("\uE036", "Redémarrer", true, AppLauncher.Restart);
+            AddPower("\uE3DA", "Éteindre", true, AppLauncher.Shutdown);
+            AddPower("\uE42A", "Déconnexion", true, AppLauncher.Logoff);
         }
 
         void AddPower(string glyph, string label, bool confirm, Action act)
@@ -316,51 +320,73 @@ namespace DynamicIsland
             if (repo.Length == 0)
             {
                 const string none = "Aucun dépôt GitHub configuré (Réglages › Mises à jour).";
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE946", Title = "Mises à jour", Body = none, Duration = TimeSpan.FromSeconds(4), Width = 420, Height = 76 });
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE2CE", Title = "Mises à jour", Body = none, Duration = TimeSpan.FromSeconds(4), Width = 420, Height = 76 });
                 return none;
             }
 
             UpdateInfo u;
-            try { u = await Updater.CheckAsync(repo); }
+            try { u = await Updater.CheckAsync(repo, S.BetaChannel); }
             catch (Exception ex)
             {
                 App.Log(ex);
                 var err = "Vérification impossible : " + ex.Message;
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE783", Title = "Mises à jour", Body = err, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 });
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE4E2", Title = "Mises à jour", Body = err, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 });
                 return err;
             }
 
             if (u == null)
             {
-                var ok = $"Malbo est à jour (version {V(Updater.Current)}).";
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE73E", Title = "Malbo est à jour", Body = $"Version {V(Updater.Current)}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
+                var ok = $"Malbo est à jour (version {Updater.CurrentName}).";
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE182", Title = "Malbo est à jour", Body = $"Version {Updater.CurrentName}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
                 return ok;
+            }
+
+            // Installation automatique : on attend que l'île soit au repos pour ne pas couper l'utilisateur.
+            if (!manual && (S.AutoInstallUpdates || u.Mandatory))
+            {
+                _pendingUpdate = u;
+                TryAutoInstall();
+                return $"Version {u.Name} : installation automatique dès que Malbo est au repos.";
             }
 
             var notes = (u.Notes ?? "").Split('\n').Select(l => l.Trim().TrimStart('#', '-', '*', ' ')).FirstOrDefault(l => l.Length > 0);
             ShowPeek(new PeekData
             {
-                Key = "alert", Glyph = "\uE896",
-                Title = $"Mise à jour {V(u.Version)} dispo",
-                Body = string.IsNullOrEmpty(notes) ? $"Version actuelle : {V(Updater.Current)}" : notes,
+                Key = "alert", Glyph = "\uE20C",
+                Title = $"Mise à jour {u.Name} dispo",
+                Body = string.IsNullOrEmpty(notes) ? $"Version actuelle : {Updater.CurrentName}" : notes,
                 Duration = TimeSpan.FromSeconds(12), Width = 460, Height = 76,
                 Actions = new() { ("Installer", () => _ = ApplyUpdateAsync(u)) }
             });
-            return $"Version {V(u.Version)} disponible (actuelle : {V(Updater.Current)}).";
+            return $"Version {u.Name} disponible (actuelle : {Updater.CurrentName}).";
+        }
+
+        /// <summary>Appelé chaque seconde : lance la mise à jour en attente quand l'île est compacte et inutilisée.</summary>
+        void TryAutoInstall()
+        {
+            var u = _pendingUpdate;
+            if (u == null || _updating) return;
+            bool idle = _mode == Mode.Compact && !HitZone.IsMouseOver && !_menuOpen && _curPeek == null;
+            if (!idle) return;
+            _pendingUpdate = null;
+            _ = ApplyUpdateAsync(u);
         }
 
         async Task ApplyUpdateAsync(UpdateInfo u)
         {
+            if (_updating) return;
+            _updating = true;
             try
             {
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE896", Title = "Mise à jour en cours…", Body = $"Malbo {V(u.Version)} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE20C", Title = "Mise à jour en cours…", Body = $"Malbo {u.Name} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
                 await Updater.ApplyAsync(u);
             }
             catch (Exception ex)
             {
                 App.Log(ex);
-                Alert("Mise à jour impossible", ex.Message, "\uE783");
+                Alert("Mise à jour impossible", ex.Message, "\uE4E2");
             }
+            finally { _updating = false; }
         }
     }
 }

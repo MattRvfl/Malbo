@@ -1,0 +1,98 @@
+# Publie une release GitHub quand un tag vX.Y.Z est poussé, ou quand une note de version
+# .github/release-notes/<tag>.md est ajoutée/modifiée sur une branche (le tag est alors créé par la release) :
+# compile Malbo.exe (fichier unique autonome) sur Windows, calcule son SHA-256,
+# joint Malbo.exe + update.json à la release. Pré-release si le tag contient un tiret (v1.2.0-beta)
+# ou si la note de version contient la ligne <!-- prerelease -->.
+# Les notes viennent de .github/release-notes/<tag>.md si le fichier existe.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+    branches: ['**']
+    paths: ['.github/release-notes/**']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Déterminer le tag
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') { $tag = '${{ github.ref_name }}' }
+          else {
+            $f = git diff --name-only --diff-filter=AM HEAD~1 HEAD -- .github/release-notes | Where-Object { $_ -like '*.md' } | Select-Object -Last 1
+            if (-not $f) { throw "Aucune note de version modifiée dans ce commit." }
+            $tag = [System.IO.Path]::GetFileNameWithoutExtension($f)
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+') { throw "Tag invalide : $tag" }
+          "TAG=$tag" >> $env:GITHUB_ENV
+          # Release déjà publiée (ex. fusion de la branche dans main) : on ne la reconstruit pas,
+          # sinon Malbo.exe changerait d'empreinte sous une version déjà distribuée.
+          if ('${{ github.ref_type }}' -ne 'tag') {
+            gh release view $tag --repo '${{ github.repository }}' *> $null
+            if ($LASTEXITCODE -eq 0) { Write-Host "La release $tag existe déjà : rien à faire."; "SKIP=true" >> $env:GITHUB_ENV }
+            $global:LASTEXITCODE = 0
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-dotnet@v4
+        if: env.SKIP != 'true'
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publier Malbo.exe
+        if: env.SKIP != 'true'
+        shell: pwsh
+        run: |
+          dotnet publish DynamicIsland.csproj -c Release -r win-x64 -o publish `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=none
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish a échoué" }
+
+      - name: Manifeste update.json
+        if: env.SKIP != 'true'
+        shell: pwsh
+        run: |
+          $tag = $env:TAG
+          $version = $tag.TrimStart('v')
+          $sha = (Get-FileHash -Algorithm SHA256 -Path 'publish/Malbo.exe').Hash
+          $manifest = [ordered]@{
+            version   = $version
+            url       = "https://github.com/${{ github.repository }}/releases/download/$tag/Malbo.exe"
+            sha256    = $sha
+            notes     = "Malbo $version"
+            mandatory = $false
+            published = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          }
+          [System.IO.File]::WriteAllText("$PWD/publish/update.json", ($manifest | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
+          $notes = ".github/release-notes/$tag.md"
+          if (-not (Test-Path $notes)) { Set-Content -Path $notes -Value "Malbo $version" -Encoding utf8 }
+          Add-Content -Path $notes -Value "`n---`n**SHA-256 de Malbo.exe** : ``$sha``" -Encoding utf8
+          # Pré-release : tag avec un tiret (v1.2.0-beta), ou note de version contenant la ligne <!-- prerelease -->
+          $pre = $tag.Contains('-') -or ((Get-Content $notes -Raw) -match '<!--\s*prerelease\s*-->')
+          "PRERELEASE=$($pre.ToString().ToLower())" >> $env:GITHUB_ENV
+          "NOTES=$notes" >> $env:GITHUB_ENV
+
+      - uses: softprops/action-gh-release@v2
+        if: env.SKIP != 'true'
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Malbo ${{ env.TAG }}
+          body_path: ${{ env.NOTES }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
+          files: |
+            publish/Malbo.exe
+            publish/update.json

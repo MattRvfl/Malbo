@@ -1,7 +1,7 @@
 // Réglages du site Malbo. C'est le seul fichier à modifier pour changer ces valeurs.
 window.MALBO = {
   // Lien d'invitation du serveur Discord (ex. "https://discord.gg/abcdef"). Vide = bouton « bientôt ».
-  discord: "",
+  discord: "https://discord.gg/aWx93s5h9B",
 
   // Dépôt GitHub (versions, journal, téléchargement).
   repo: "MattRvfl/Malbo",

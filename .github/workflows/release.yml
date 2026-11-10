@@ -34,12 +34,23 @@ jobs:
           }
           if ($tag -notmatch '^v\d+\.\d+\.\d+') { throw "Tag invalide : $tag" }
           "TAG=$tag" >> $env:GITHUB_ENV
+          # Release déjà publiée (ex. fusion de la branche dans main) : on ne la reconstruit pas,
+          # sinon Malbo.exe changerait d'empreinte sous une version déjà distribuée.
+          if ('${{ github.ref_type }}' -ne 'tag') {
+            gh release view $tag --repo '${{ github.repository }}' *> $null
+            if ($LASTEXITCODE -eq 0) { Write-Host "La release $tag existe déjà : rien à faire."; "SKIP=true" >> $env:GITHUB_ENV }
+            $global:LASTEXITCODE = 0
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - uses: actions/setup-dotnet@v4
+        if: env.SKIP != 'true'
         with:
           dotnet-version: '10.0.x'
 
       - name: Publier Malbo.exe
+        if: env.SKIP != 'true'
         shell: pwsh
         run: |
           dotnet publish DynamicIsland.csproj -c Release -r win-x64 -o publish `
@@ -51,6 +62,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish a échoué" }
 
       - name: Manifeste update.json
+        if: env.SKIP != 'true'
         shell: pwsh
         run: |
           $tag = $env:TAG
@@ -74,6 +86,7 @@ jobs:
           "NOTES=$notes" >> $env:GITHUB_ENV
 
       - uses: softprops/action-gh-release@v2
+        if: env.SKIP != 'true'
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}

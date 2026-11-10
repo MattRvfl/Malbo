@@ -147,6 +147,11 @@ namespace DynamicIsland
         /// <summary>L'île suit l'écran où se trouve la souris.</summary>
         public bool FollowMouseScreen { get; set; } = false;
         public bool WheelVolume { get; set; } = true;
+        /// <summary>Onglets affichés directement dans la barre, dans l'ordre ; les autres passent derrière le bouton « … ».</summary>
+        public string MainTabs { get; set; } = "Média, Notifs, Outils, Système, Lancer";
+        /// <summary>Décalage vertical de l'île (px) pour ne pas recouvrir les onglets du navigateur ou une barre de titre.</summary>
+        public int TopOffset { get; set; } = 0;
+        public bool TipsShown { get; set; } = false;
 
         // Notifications (1.3)
         public bool GroupNotifs { get; set; } = true;

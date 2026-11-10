@@ -19,8 +19,10 @@ namespace DynamicIsland
     {
         public string Key = "";
         public ImageSource Image;
-        public string Glyph = "\uEA8F";
+        public string Glyph = "\uE0CE";
         public string Title, Body;
+        /// <summary>Regroupement dans la file d'attente (nom de l'appli pour une notification).</summary>
+        public string Group = "";
         public double? Progress;
         public TimeSpan Duration = TimeSpan.FromSeconds(4);
         public double Width = 420, Height = 76;
@@ -95,7 +97,7 @@ namespace DynamicIsland
             Bubble.MouseLeftButtonUp += Bubble_Click;
 
             _hover.Tick += (s, e) => { _hover.Stop(); if (_mode == Mode.Compact && HitZone.IsMouseOver) Expand(); };
-            _leave.Tick += (s, e) => { _leave.Stop(); if (!HitZone.IsMouseOver && !_pinned && !_menuOpen && _mode == Mode.Expanded) Collapse(); };
+            _leave.Tick += (s, e) => { _leave.Stop(); if (!HitZone.IsMouseOver && !_pinned && !_menuOpen && !Typing && _mode == Mode.Expanded) Collapse(); };
             _peekT.Tick += (s, e) =>
             {
                 if (HitZone.IsMouseOver && _curPeek?.Key != "osd") return; // reste affiché tant que la souris est dessus
@@ -129,6 +131,9 @@ namespace DynamicIsland
             InitMore();
             InitPlugins();
             InitTray();
+            InitKeyboard();
+            CheckIconFont();
+            FirstRunTip();
             _fast.Start();
             _tick.Start();
             UpdateCompact(true);
@@ -213,11 +218,10 @@ namespace DynamicIsland
             TabLaunch.Visibility = Vis(S.ShowLaunch);
             TabPlugins.Visibility = Vis(S.ShowPlugins);
             TabMore.Visibility = Vis(S.ShowMore);
-            var first = _tabs.Keys.FirstOrDefault(t => t.Visibility == Visibility.Visible);
-            if (_tabs.Keys.FirstOrDefault(t => t.IsChecked == true)?.Visibility != Visibility.Visible && first != null) first.IsChecked = true;
+            LayoutTabs(); // onglets principaux dans la barre, les autres derrière « … »
             DndCheck.IsChecked = S.DoNotDisturb;
             SetStartup(S.StartWithWindows);
-            if (!S.AccentFromArt) Application.Current.Resources["Accent"] = new SolidColorBrush(CustomAccent());
+            if (!S.AccentFromArt || !_media.State.HasMedia || _media.State.Art == null) SetAccent(CustomAccent());
             if (_liveHost != null) ApplyLiveApi(); // port ou activation changés dans les réglages
         }
 
@@ -271,7 +275,7 @@ namespace DynamicIsland
                 default:
                     Left = left + (sw - Width) / 2; Root.HorizontalAlignment = HorizontalAlignment.Center; break;
             }
-            Top = top;
+            Top = top + Math.Clamp(S.TopOffset, 0, 200); // décalage vertical : laisse voir les onglets du navigateur / la barre de titre
         }
 
         static void SetStartup(bool on)
@@ -305,7 +309,7 @@ namespace DynamicIsland
         void SetPinned(bool p)
         {
             _pinned = p;
-            PinBtn.Content = p ? "\uE77A" : "\uE718";
+            PinBtn.FontFamily = (FontFamily)FindResource(p ? "IconsFill" : "Icons"); // punaise pleine quand l'île est épinglée
             PinBtn.Foreground = p ? (Brush)FindResource("Accent") : (Brush)FindResource("Fg");
         }
 
@@ -461,17 +465,35 @@ namespace DynamicIsland
             if (_curPeek != null && _curPeek.Key != "osd") _peeks.Clear();
             _curPeek = null;
             _mode = Mode.Expanded;
-            AnimateSize(ExpW, ExpH);
             ShowLayer(ExpandedLayer);
-            OnTabShown();
+            OnTabShown(); // fixe aussi la hauteur selon l'onglet
         }
 
         void Collapse()
         {
+            if (Keyboard.FocusedElement is DependencyObject fo && fo is Visual && ((Visual)fo).IsDescendantOf(Island)) Keyboard.ClearFocus();
             _mode = Mode.Compact;
             ShowLayer(CompactLayer);
             UpdateCompact(true);
             if (_peeks.Count > 0) Dispatcher.BeginInvoke(new Action(NextPeek), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// File d'attente raisonnable : au plus 3 aperçus en attente, et un seul par appli pour les notifications
+        /// (le plus récent remplace l'ancien) — après une rafale de messages, l'île ne rejoue pas dix aperçus périmés.
+        /// </summary>
+        void EnqueuePeek(PeekData p)
+        {
+            var list = _peeks.ToList();
+            if (p.Key == "notif") list.RemoveAll(x => x.Key == "notif" && x.Group == p.Group);
+            list.Add(p);
+            while (list.Count > 3)
+            {
+                int drop = list.FindIndex(x => x.Key == "notif");
+                list.RemoveAt(drop >= 0 && drop < list.Count - 1 ? drop : 0);
+            }
+            _peeks.Clear();
+            foreach (var x in list) _peeks.Enqueue(x);
         }
 
         public void ShowPeek(PeekData p)
@@ -479,7 +501,7 @@ namespace DynamicIsland
             if (_mode == Mode.Expanded)
             {
                 if (p.Key == "osd" || p.Key == "notif" || p.Key == "track") return;
-                _peeks.Enqueue(p);
+                EnqueuePeek(p);
                 return;
             }
             if (_mode == Mode.Peek)
@@ -489,9 +511,12 @@ namespace DynamicIsland
                     RenderPeek(p); _curPeek = p; _peekT.Stop(); _peekT.Interval = p.Duration; _peekT.Start();
                     return;
                 }
-                if (_curPeek?.Key == "osd" || _curPeek?.Key == "track") { _peeks.Enqueue(p); _peekT.Stop(); EndPeek(); return; }
+                if (_curPeek?.Key == "osd" || _curPeek?.Key == "track") { EnqueuePeek(p); _peekT.Stop(); EndPeek(); return; }
                 if (p.Key == "osd") return;
-                _peeks.Enqueue(p);
+                EnqueuePeek(p);
+                // quelque chose attend : l'aperçu affiché n'occupe pas l'île plus de 2,5 s de plus
+                if (_curPeek != null && _curPeek.Actions == null && _peekT.Interval > TimeSpan.FromSeconds(2.5))
+                { _peekT.Stop(); _peekT.Interval = TimeSpan.FromSeconds(2.5); _peekT.Start(); }
                 return;
             }
             DisplayPeek(p);
@@ -505,7 +530,10 @@ namespace DynamicIsland
             AnimateSize(p.Width, p.Height);
             ShowLayer(PeekLayer);
             _peekT.Stop();
-            _peekT.Interval = p.Duration;
+            // d'autres aperçus attendent : on raccourcit (sauf s'il y a un bouton à cliquer)
+            var dur = p.Duration;
+            if (_peeks.Count > 0 && p.Actions == null && dur > TimeSpan.FromSeconds(3)) dur = TimeSpan.FromSeconds(3);
+            _peekT.Interval = dur;
             _peekT.Start();
         }
 
@@ -609,7 +637,7 @@ namespace DynamicIsland
 
             if (_fpsMode)
             {
-                SetCompactIcon("\uE7FC", (Brush)FindResource("Accent"));
+                SetCompactIcon("\uE26E", (Brush)FindResource("Accent"));
                 Bars.Visibility = Visibility.Collapsed;
                 // superposition de performances : FPS + charge processeur / carte graphique
                 var perf = _sys.Latest;
@@ -621,41 +649,41 @@ namespace DynamicIsland
                 case Act.Media:
                     CompactIcon.SetResourceReference(TextBlock.ForegroundProperty, "SubFg");
                     CompactIcon.Visibility = st.Art == null ? Visibility.Visible : Visibility.Collapsed;
-                    CompactIcon.Text = "\uE8D6";
+                    CompactIcon.Text = "\uE340";
                     CompactArt.Visibility = st.Art != null ? Visibility.Visible : Visibility.Collapsed;
                     text = lyric ? _currentLyric : (st.IsPlaying ? st.Title : $"{st.Title} — en pause");
                     Bars.Visibility = st.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
                     w = lyric ? 420 : 330;
                     break;
                 case Act.Timer:
-                    SetCompactIcon("\uE916", (Brush)FindResource("Accent"));
+                    SetCompactIcon("\uE492", (Brush)FindResource("Accent"));
                     Bars.Visibility = Visibility.Collapsed;
                     text = $"{TimerLabel} · {TimerText()}";
                     w = 230;
                     break;
                 case Act.Live:
                     var la = _liveList[0];
-                    SetCompactIcon(string.IsNullOrEmpty(la.Glyph) ? "\uE9D9" : la.Glyph, (Brush)FindResource("Accent"));
+                    SetCompactIcon(string.IsNullOrEmpty(la.Glyph) ? "\uE000" : la.Glyph, (Brush)FindResource("Accent"));
                     Bars.Visibility = Visibility.Collapsed;
                     text = LiveText(la) + (_liveList.Count > 1 ? $"  +{_liveList.Count - 1}" : "");
                     w = Math.Clamp(120 + text.Length * 7.2, 200, 380);
                     break;
                 case Act.Voice:
-                    SetCompactIcon("\uE767", AnySpeaking ? Green : null);
+                    SetCompactIcon("\uE584", AnySpeaking ? Green : null);
                     Bars.Visibility = Visibility.Collapsed;
                     text = VoiceCompactText();
                     w = 280;
                     break;
                 case Act.Download:
-                    SetCompactIcon("\uE896", (Brush)FindResource("Accent"));
+                    SetCompactIcon("\uE20C", (Brush)FindResource("Accent"));
                     Bars.Visibility = Visibility.Collapsed;
                     text = "Téléchargement · " + DownloadName();
                     w = 300;
                     break;
                 default:
-                    SetCompactIcon("\uE823", null);
+                    SetCompactIcon(_weather != null ? InfoService.WeatherIcon(_weather.Code) : Ico.Clock, null);
                     Bars.Visibility = Visibility.Collapsed;
-                    text = DateTime.Now.ToString("HH:mm") + (_weather != null ? $"   {InfoService.WeatherIcon(_weather.Code)} {_weather.Temp:0}°" : "");
+                    text = DateTime.Now.ToString("HH:mm") + (_weather != null ? $"   {_weather.Temp:0}°" : "");
                     w = 200;
                     break;
             }
@@ -720,7 +748,7 @@ namespace DynamicIsland
                     case Act.Live:
                         var la = _liveList.Count > 0 ? _liveList[0] : null;
                         if (la == null) break;
-                        BubbleGlyph.Text = string.IsNullOrEmpty(la.Glyph) ? "\uE9D9" : la.Glyph;
+                        BubbleGlyph.Text = string.IsNullOrEmpty(la.Glyph) ? "\uE000" : la.Glyph;
                         BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
                         if (la.IsTimer || la.Progress.HasValue)
                         {
@@ -732,13 +760,13 @@ namespace DynamicIsland
                         Bubble.ToolTip = LiveText(la);
                         break;
                     case Act.Voice:
-                        BubbleGlyph.Text = "\uE767";
+                        BubbleGlyph.Text = "\uE584";
                         if (AnySpeaking) BubbleGlyph.Foreground = Green;
                         else BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
                         Bubble.ToolTip = VoiceCompactText();
                         break;
                     case Act.Download:
-                        BubbleGlyph.Text = "\uE896";
+                        BubbleGlyph.Text = "\uE20C";
                         BubbleGlyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
                         Bubble.ToolTip = "Téléchargement · " + DownloadName();
                         break;
@@ -888,6 +916,7 @@ namespace DynamicIsland
         {
             if (!_ready || _tabs == null) return;
             foreach (var kv in _tabs) kv.Value.Visibility = kv.Key == sender ? Visibility.Visible : Visibility.Collapsed;
+            LayoutTabs();
             OnTabShown();
         }
 
@@ -902,6 +931,7 @@ namespace DynamicIsland
             if (PanelSystem.Visibility == Visibility.Visible) UpdateSystemUI();
             if (PanelInfo.Visibility == Visibility.Visible) UpdateClocks();
             if (PanelMore.Visibility == Visibility.Visible) OnMoreShown();
+            ApplyTabHeight();
             UpdateBackdrop();
             UpdateFastTimer();
         }

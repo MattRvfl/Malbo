@@ -57,7 +57,7 @@ namespace DynamicIsland
             if (!S.RainAlerts || _weather?.RainInMinutes is not int n || n > 60) return;
             if ((DateTime.Now - _lastRainAlert).TotalHours < 2) return;
             _lastRainAlert = DateTime.Now;
-            Alert($"Pluie dans {n} min", _weather.City, "\uE9C4");
+            Alert($"Pluie dans {n} min", _weather.City, "\uE1B4");
         }
 
         async void LoadMarkets()
@@ -108,7 +108,7 @@ namespace DynamicIsland
                     Right = Until(ev.Start),
                     Tone = (ev.Start - DateTime.Now).TotalHours < 1 ? "accent" : "sub"
                 }).ToList();
-                CalEmpty.Text = "Rien de prévu dans les 14 jours 🎉";
+                CalEmpty.Text = "Rien de prévu dans les 14 jours";
                 CalEmpty.Visibility = _events.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             catch { CalEmpty.Text = "Impossible de lire l'agenda (URL ICS invalide ?)"; CalEmpty.Visibility = Visibility.Visible; }
@@ -134,7 +134,7 @@ namespace DynamicIsland
                 var mins = (ev.Start - DateTime.Now).TotalMinutes;
                 var key = ev.Summary + ev.Start.Ticks;
                 if (mins > 0 && mins <= 10 && _reminded.Add(key))
-                    Alert(ev.Summary, $"Commence dans {Math.Ceiling(mins)} min ({ev.Start:HH:mm})", "\uE787");
+                    Alert(ev.Summary, $"Commence dans {Math.Ceiling(mins)} min ({ev.Start:HH:mm})", "\uE10A");
             }
         }
 

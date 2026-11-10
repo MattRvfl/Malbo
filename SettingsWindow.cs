@@ -14,7 +14,12 @@ namespace DynamicIsland
     public class SettingsWindow : Window
     {
         readonly AppSettings _s;
-        readonly StackPanel _p = new() { Margin = new Thickness(22, 10, 22, 10) };
+        // Page de la catégorie en cours de construction (chaque Section() en ouvre une nouvelle).
+        StackPanel _p = new() { Margin = new Thickness(22, 10, 22, 10) };
+        readonly List<(string Title, StackPanel Page, RadioButton Nav, System.Text.StringBuilder Words)> _pages = new();
+        readonly StackPanel _nav = new();
+        readonly ScrollViewer _host = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Brush _fg = Brushes.White;
         readonly List<Action> _commit = new();
         public event Action Saved;
         public Func<Task<string>> ConnectSpotify, ConnectDiscord, CheckUpdate;
@@ -25,20 +30,41 @@ namespace DynamicIsland
             _s = s;
             Title = "Réglages · Malbo";
             Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/malbo.ico"));
-            Width = 540; Height = 760;
+            Width = 780; Height = 640; MinWidth = 640; MinHeight = 420;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x18));
-            Foreground = Brushes.White;
+            // Même thème que l'île (clair / sombre / auto) : on reprend ses couleurs.
+            SetResourceReference(BackgroundProperty, "IslandBg");
+            SetResourceReference(ForegroundProperty, "Fg");
+            _fg = Application.Current.Resources["Fg"] as Brush ?? Brushes.White;
             FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI");
 
             var root = new DockPanel();
-            var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16) };
+            var bar = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16, 8, 16, 14) };
             DockPanel.SetDock(bar, Dock.Bottom);
             bar.Children.Add(Btn("Annuler", Close));
             bar.Children.Add(Btn("Enregistrer", Save));
             root.Children.Add(bar);
-            root.Children.Add(new ScrollViewer { Content = _p, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+
+            // Colonne de gauche : recherche + catégories
+            var side = new DockPanel { Width = 190, Margin = new Thickness(14, 14, 0, 0) };
+            DockPanel.SetDock(side, Dock.Left);
+            var search = new TextBox { Style = (Style)Application.Current.FindResource("Input"), Margin = new Thickness(0, 0, 0, 8), ToolTip = "Rechercher un réglage" };
+            var hint = new TextBlock { Text = "Rechercher…", IsHitTestVisible = false, Margin = new Thickness(10, 7, 0, 0), FontSize = 12, Opacity = 0.5 };
+            var searchBox = new Grid();
+            searchBox.Children.Add(search);
+            searchBox.Children.Add(hint);
+            DockPanel.SetDock(searchBox, Dock.Top);
+            side.Children.Add(searchBox);
+            side.Children.Add(new ScrollViewer { Content = _nav, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+            search.TextChanged += (o, e) =>
+            {
+                hint.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+                Filter(search.Text);
+            };
+            root.Children.Add(side);
+            root.Children.Add(_host);
             Content = root;
+            PreviewKeyDown += (o, e) => { if (e.Key == System.Windows.Input.Key.Escape) Close(); };
 
             Section("Apparence");
             Combo("Position", new[] { "Centre", "Gauche", "Droite" }, () => s.Position, v => s.Position = v);
@@ -46,6 +72,8 @@ namespace DynamicIsland
             ComboIdx("Écran", screens, () => s.ScreenIndex, v => s.ScreenIndex = v);
             Combo("Thème", new[] { "Sombre", "Clair", "Auto" }, () => s.Theme, v => s.Theme = v);
             Slide("Opacité", 0.4, 1, () => s.Opacity, v => s.Opacity = v);
+            Text("Décalage vers le bas (px)", () => s.TopOffset.ToString(), v => { if (int.TryParse(v, out var n) && n >= 0 && n <= 200) s.TopOffset = n; });
+            Note("Descend l'île pour qu'elle ne recouvre pas les onglets du navigateur ou la barre de titre des fenêtres (essaie 30 à 40).");
             Slide("Taille", 0.8, 1.5, () => s.Scale, v => s.Scale = v);
             Check("L'île suit l'écran où se trouve la souris", () => s.FollowMouseScreen, v => s.FollowMouseScreen = v);
             Check("Couleur d'accent selon la pochette", () => s.AccentFromArt, v => s.AccentFromArt = v);
@@ -64,14 +92,17 @@ namespace DynamicIsland
             Text("Zone de survol (px)", () => s.HoverZone.ToString(), v => { if (int.TryParse(v, out var n) && n >= 0 && n <= 200) s.HoverZone = n; });
             Check("Onglet Lancer visible", () => s.ShowLaunch, v => s.ShowLaunch = v);
 
-            Section("Onglets visibles");
+            Section("Onglets");
+            Text("Onglets principaux, dans l'ordre", () => s.MainTabs, v => s.MainTabs = string.IsNullOrWhiteSpace(v) ? MainWindow.DefaultMainTabs : v);
+            Note("Ceux-ci sont dans la barre ; les autres passent derrière le bouton « … ». Noms : Média, Notifs, Outils, Système, Lancer, Fichiers, Infos, Bureau, Plugins.");
+            Note("Onglets activés :");
             Check("Média", () => s.ShowMedia, v => s.ShowMedia = v);
             Check("Notifications", () => s.ShowNotif, v => s.ShowNotif = v);
             Check("Outils", () => s.ShowTools, v => s.ShowTools = v);
             Check("Fichiers", () => s.ShowFiles, v => s.ShowFiles = v);
             Check("Système", () => s.ShowSystem, v => s.ShowSystem = v);
             Check("Infos", () => s.ShowInfo, v => s.ShowInfo = v);
-            Check("Plus (fenêtres, activités, sortie audio, notes…)", () => s.ShowMore, v => s.ShowMore = v);
+            Check("Bureau (fenêtres, activités, sortie audio, notes, astuces…)", () => s.ShowMore, v => s.ShowMore = v);
             Check("Plugins", () => s.ShowPlugins, v => s.ShowPlugins = v);
 
             Section("Notifications");
@@ -223,6 +254,33 @@ namespace DynamicIsland
             });
             pl.HorizontalAlignment = HorizontalAlignment.Left;
             _p.Children.Add(pl);
+
+            if (_pages.Count > 0) _pages[0].Nav.IsChecked = true;
+        }
+
+        static string Fold(string t) => new string((t ?? "").Normalize(System.Text.NormalizationForm.FormD)
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray()).ToLowerInvariant();
+
+        /// <summary>Recherche : ne garde que les catégories qui contiennent le texte tapé, et ouvre la première.</summary>
+        void Filter(string query)
+        {
+            var q = Fold(query).Trim();
+            RadioButton first = null;
+            bool currentVisible = false;
+            foreach (var pg in _pages)
+            {
+                bool hit = q.Length == 0 || Fold(pg.Title + " " + pg.Words).Contains(q);
+                pg.Nav.Visibility = hit ? Visibility.Visible : Visibility.Collapsed;
+                if (hit && first == null) first = pg.Nav;
+                if (hit && pg.Nav.IsChecked == true) currentVisible = true;
+            }
+            if (!currentVisible && first != null) first.IsChecked = true;
+        }
+
+        /// <summary>Mots trouvables par la recherche pour la catégorie en cours.</summary>
+        void Index(string text)
+        {
+            if (_pages.Count > 0 && !string.IsNullOrEmpty(text)) _pages[_pages.Count - 1].Words.Append(' ').Append(text);
         }
 
         Button Btn(string text, Action a)
@@ -232,13 +290,30 @@ namespace DynamicIsland
             return b;
         }
 
-        void Section(string t) => _p.Children.Add(new TextBlock
+        /// <summary>Ouvre une nouvelle catégorie : une page à droite + une entrée dans le menu de gauche.</summary>
+        void Section(string t)
         {
-            Text = t, FontSize = 15, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 18, 0, 6),
-            Foreground = new SolidColorBrush(Color.FromRgb(10, 132, 255))
-        });
+            var page = new StackPanel { Margin = new Thickness(22, 14, 22, 14) };
+            var title = new TextBlock { Text = t, FontSize = 20, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 12) };
+            page.Children.Add(title);
+            var nav = new RadioButton
+            {
+                Content = t, GroupName = "settingsNav", Style = (Style)Application.Current.FindResource("SegBtn"),
+                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 1, 0, 1), FontSize = 12.5
+            };
+            nav.Checked += (o, e) => { _host.Content = page; _host.ScrollToTop(); };
+            _nav.Children.Add(nav);
+            _pages.Add((t, page, nav, new System.Text.StringBuilder()));
+            _p = page;
+        }
 
-        void Note(string t) => _p.Children.Add(new TextBlock { Text = t, FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray, Margin = new Thickness(0, 2, 0, 6) });
+        void Note(string t)
+        {
+            Index(t);
+            var tb = new TextBlock { Text = t, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) };
+            tb.SetResourceReference(TextBlock.ForegroundProperty, "SubFg");
+            _p.Children.Add(tb);
+        }
 
         void Link(string t, string url)
         {
@@ -249,7 +324,8 @@ namespace DynamicIsland
 
         Grid Row(string label, UIElement ctl)
         {
-            var g = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            Index(label);
+            var g = new Grid { Margin = new Thickness(0, 4, 0, 4) };
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
             g.ColumnDefinitions.Add(new ColumnDefinition());
             g.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, FontSize = 12.5, TextWrapping = TextWrapping.Wrap });
@@ -261,7 +337,9 @@ namespace DynamicIsland
 
         void Check(string label, Func<bool> get, Action<bool> set)
         {
-            var c = new CheckBox { Content = label, IsChecked = get(), Margin = new Thickness(0, 4, 0, 4), Foreground = Brushes.White };
+            Index(label);
+            var c = new CheckBox { Content = label, IsChecked = get(), Margin = new Thickness(0, 5, 0, 5), FontSize = 12.5 };
+            c.SetResourceReference(ForegroundProperty, "Fg");
             _p.Children.Add(c);
             _commit.Add(() => set(c.IsChecked == true));
         }
@@ -311,18 +389,35 @@ namespace DynamicIsland
             _p.Children.Add(status);
         }
 
+        /// <summary>Choix parmi quelques valeurs : boutons segmentés (au style de l'île) plutôt qu'une liste déroulante Windows.</summary>
         void Combo(string label, string[] items, Func<string> get, Action<string> set, bool editable = false)
         {
-            var c = new ComboBox { ItemsSource = items, IsEditable = editable, Text = get(), SelectedItem = items.Contains(get()) ? get() : null };
-            Row(label, c);
-            _commit.Add(() => { var v = editable ? c.Text : c.SelectedItem as string; if (!string.IsNullOrWhiteSpace(v)) set(v); });
+            if (editable)
+            {
+                // valeur libre : champ de texte, les valeurs connues sont rappelées dessous
+                Text(label, get, v => { if (!string.IsNullOrWhiteSpace(v)) set(v); });
+                Note("Valeurs courantes : " + string.Join(" · ", items));
+                return;
+            }
+            int idx = Array.IndexOf(items, get());
+            ComboIdx(label, items, () => idx < 0 ? 0 : idx, i => { if (i >= 0 && i < items.Length) set(items[i]); });
         }
 
         void ComboIdx(string label, string[] items, Func<int> get, Action<int> set)
         {
-            var c = new ComboBox { ItemsSource = items, SelectedIndex = Math.Clamp(get(), 0, items.Length - 1) };
-            Row(label, c);
-            _commit.Add(() => set(Math.Max(0, c.SelectedIndex)));
+            var wrap = new WrapPanel();
+            var group = "seg" + Guid.NewGuid().ToString("N");
+            int sel = Math.Clamp(get(), 0, Math.Max(0, items.Length - 1));
+            var buttons = new List<RadioButton>();
+            for (int i = 0; i < items.Length; i++)
+            {
+                var rb = new RadioButton { Content = items[i], GroupName = group, IsChecked = i == sel, Style = (Style)Application.Current.FindResource("SegBtn"), Margin = new Thickness(0, 2, 4, 2) };
+                buttons.Add(rb);
+                wrap.Children.Add(rb);
+                Index(items[i]);
+            }
+            Row(label, wrap);
+            _commit.Add(() => set(Math.Max(0, buttons.FindIndex(b => b.IsChecked == true))));
         }
 
         void Slide(string label, double min, double max, Func<double> get, Action<double> set)

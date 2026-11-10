@@ -41,7 +41,7 @@ namespace DynamicIsland
                 if (!S.VolumeOsd) return;
                 ShowPeek(new PeekData
                 {
-                    Key = "osd", Glyph = m ? "\uE74F" : v < 0.01 ? "\uE992" : v < 0.34 ? "\uE993" : v < 0.67 ? "\uE994" : "\uE995",
+                    Key = "osd", Glyph = m ? "\uE45A" : v < 0.01 ? "\uE44E" : v < 0.34 ? "\uE44C" : v < 0.67 ? "\uE44A" : "\uE44A",
                     Title = m ? "Muet" : $"Volume  {Math.Round(v * 100)} %", Progress = m ? 0 : v,
                     Duration = TimeSpan.FromSeconds(1.6), Width = 300, Height = 48
                 });
@@ -67,7 +67,7 @@ namespace DynamicIsland
             MediaTitle.Text = st.HasMedia ? st.Title : "Rien en lecture";
             MediaArtist.Text = st.Artist;
             MediaApp.Text = st.HasMedia ? "via " + PrettyApp(st.AppId) : "";
-            PlayBtn.Content = st.IsPlaying ? "\uE769" : "\uE768";
+            PlayBtn.Content = st.IsPlaying ? "\uE39E" : "\uE3D0";
             MediaSlider.Maximum = Math.Max(1, st.Duration.TotalSeconds);
 
             if (st.Art != null)
@@ -76,7 +76,7 @@ namespace DynamicIsland
                 BigArt.Background = brush;
                 BigArtGlyph.Visibility = Visibility.Collapsed;
                 CompactArt.Background = brush;
-                if (S.AccentFromArt) Application.Current.Resources["Accent"] = new SolidColorBrush(AccentFrom(st.Art));
+                if (S.AccentFromArt) SetAccent(AccentFrom(st.Art));
             }
             else
             {
@@ -109,7 +109,7 @@ namespace DynamicIsland
                 _peekedKey = st.Key;
                 ShowPeek(new PeekData
                 {
-                    Key = "track", Image = st.Art, Glyph = "\uE8D6", Title = st.Title, Body = st.Artist,
+                    Key = "track", Image = st.Art, Glyph = "\uE340", Title = st.Title, Body = st.Artist,
                     Duration = TimeSpan.FromSeconds(3), Width = 380, Height = 68,
                     OnClick = () => { Expand(); TabMedia.IsChecked = true; }
                 });
@@ -178,7 +178,8 @@ namespace DynamicIsland
         void UpdateLikeUI()
         {
             bool liked = _liked == true;
-            LikeBtn.Content = liked ? "\uEB52" : "\uEB51";
+            LikeBtn.Content = Ico.Heart;
+            LikeBtn.FontFamily = (FontFamily)FindResource(liked ? "IconsFill" : "Icons"); // cœur plein quand le titre est aimé
             if (liked) LikeBtn.Foreground = LikeRed;
             else LikeBtn.SetResourceReference(ForegroundProperty, "Fg");
             LikeBtn.ToolTip = liked ? "Retirer des titres likés" : "Ajouter aux titres likés";
@@ -201,7 +202,7 @@ namespace DynamicIsland
             }
             ShuffleBtn.Opacity = shuffle ? 1 : 0.45;
             RepeatBtn.Opacity = repeat != 0 ? 1 : 0.45;
-            RepeatBtn.Content = repeat == 1 ? "\uE8ED" : "\uE8EE";
+            RepeatBtn.Content = repeat == 1 ? "\uE3F8" : "\uE3F6";
             RepeatBtn.ToolTip = repeat == 1 ? "Répéter le morceau" : repeat == 2 ? "Répéter la liste" : "Répéter";
         }
 
@@ -288,7 +289,7 @@ namespace DynamicIsland
                             try { ok = await _spotify.AddToPlaylistAsync(pid, uri); } catch (Exception ex) { App.Log(ex); }
                             ShowPeek(new PeekData
                             {
-                                Key = "alert", Glyph = "\uECC8",
+                                Key = "alert", Glyph = "\uE6AA",
                                 Title = ok ? $"Ajouté à {pname}" : $"Impossible d'ajouter à {pname}",
                                 Body = _media.State.Title,
                                 Duration = TimeSpan.FromSeconds(2.5), Width = 360, Height = 68

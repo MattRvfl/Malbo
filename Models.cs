@@ -59,7 +59,7 @@ namespace DynamicIsland
         public string Preview => Image != null ? "Image" : (Text.Length > 160 ? Text.Substring(0, 160) + "…" : Text).Replace("\r", "").Trim();
         public string TimeText => Time.ToString("HH:mm");
         public bool Pinned { get; set; }
-        public string Footer => (Pinned ? "📌 Épinglé · " : "") + TimeText;
+        public string Footer => (Pinned ? "Épinglé · " : "") + TimeText;
         public Visibility ImageVis => Image != null ? Visibility.Visible : Visibility.Collapsed;
     }
 

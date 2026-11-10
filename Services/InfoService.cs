@@ -44,11 +44,12 @@ namespace DynamicIsland
         // ---------- Météo ----------
         string _geoCity; double _lat, _lon; string _geoName;
 
+        /// <summary>Icône météo (police d'icônes Phosphor) pour un code météo WMO.</summary>
         public static string WeatherIcon(int c) => c switch
         {
-            0 => "☀", 1 or 2 => "⛅", 3 => "☁", 45 or 48 => "🌫",
-            >= 51 and <= 57 => "🌦", >= 61 and <= 67 => "🌧", >= 71 and <= 77 => "❄",
-            >= 80 and <= 82 => "🌧", 85 or 86 => "🌨", >= 95 => "⛈", _ => "🌡"
+            0 => Ico.Sun, 1 or 2 => Ico.CloudSun, 3 => Ico.Cloud, 45 or 48 => Ico.CloudFog,
+            >= 51 and <= 67 => Ico.CloudRain, >= 71 and <= 77 => Ico.Snowflake,
+            >= 80 and <= 82 => Ico.CloudRain, 85 or 86 => Ico.CloudSnow, >= 95 => Ico.CloudLightning, _ => Ico.Thermometer
         };
         public static string WeatherLabel(int c) => c switch
         {
@@ -188,7 +189,7 @@ namespace DynamicIsland
                     {
                         Left = $"{Name(home)}  –  {Name(away)}",
                         Right = state == "pre" ? date.ToString("ddd HH:mm", Fr) : $"{Score(home)} - {Score(away)}",
-                        Sub = state == "in" ? "🔴 " + status.GetProperty("shortDetail").GetString() : state == "post" ? "Terminé" : "",
+                        Sub = state == "in" ? "● " + status.GetProperty("shortDetail").GetString() : state == "post" ? "Terminé" : "",
                         Tone = state == "in" ? "down" : state == "pre" ? "sub" : ""
                     });
                 }
@@ -214,7 +215,7 @@ namespace DynamicIsland
                 list.Add(new InfoRow
                 {
                     Left = pl.GetProperty("personaname").GetString(),
-                    Sub = game != null ? "🎮 " + game : st switch { 2 => "Occupé", 3 => "Absent", 4 => "Endormi", _ => "En ligne" },
+                    Sub = game != null ? Ico.GameController + " " + game : st switch { 2 => "Occupé", 3 => "Absent", 4 => "Endormi", _ => "En ligne" },
                     Right = "●",
                     Tone = game != null ? "up" : "accent"
                 });

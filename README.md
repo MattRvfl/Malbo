@@ -36,7 +36,7 @@
 - Compteur FPS en jeu (via PresentMon)
 
 **Nouveau en 1.3 (alpha)**
-- Onglet **Plus** : fenêtres ouvertes (clic = basculer), choix de la sortie audio, Wi-Fi / Bluetooth, pipette + règle, clip de jeu, notes rapides, derniers titres écoutés, profils (Normal, Travail, Jeu, Nuit)
+- Onglet **Bureau** : fenêtres ouvertes (clic = basculer), choix de la sortie audio, Wi-Fi / Bluetooth, pipette + règle, clip de jeu, notes rapides, derniers titres écoutés, profils (Normal, Travail, Jeu, Nuit)
 - **Activités en direct** : tes scripts affichent une progression dans l'île via une petite API locale (voir plus bas)
 - **Mode appel** : Teams, Zoom, Meet, Discord… détectés par le micro → chrono, notifications en pause, micro coupé partout avec `Ctrl+Alt+M`
 - Minuteurs nommés (`15 min thé`) et lancement d'applis depuis l'onglet Lancer
@@ -84,6 +84,9 @@ Publier une version :
 | `Ctrl+Alt+H` | Masquer / afficher |
 | `Ctrl+Alt+Espace` | Lecture / pause |
 | `Ctrl+Alt+M` | Couper / réactiver le micro pour toutes les applis |
+| `Échap` | Refermer l'île |
+| `Ctrl+Tab`, `Ctrl+1…9` | Changer d'onglet (île ouverte) |
+| `Tab` | Parcourir les boutons au clavier |
 | Molette sur l'île compacte | Volume |
 | Clic molette sur l'île | Lecture / pause |
 
@@ -115,3 +118,7 @@ Tout se règle dans **Réglages** (icône de la barre des tâches ou roue crant�
 - **FPS** : chemin de [PresentMon](https://github.com/GameTechDev/PresentMon/releases).
 
 Réglages et données : `%AppData%\Malbo\settings.json` · journal d'erreurs : `%AppData%\Malbo\error.log`.
+
+## Crédits
+
+Icônes : [Phosphor Icons](https://phosphoricons.com) (licence MIT), embarquées dans `Assets/Fonts`.

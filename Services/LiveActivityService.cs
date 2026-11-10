@@ -19,7 +19,7 @@ namespace DynamicIsland
         public string Body = "";
         /// <summary>0..1, ou null si la progression est inconnue.</summary>
         public double? Progress;
-        public string Glyph = "";
+        public string Glyph = "\uE000";
         public DateTime Updated = DateTime.Now;
         /// <summary>Secondes sans mise à jour avant disparition.</summary>
         public int Ttl = 600;

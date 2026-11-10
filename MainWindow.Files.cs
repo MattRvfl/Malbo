@@ -48,7 +48,7 @@ namespace DynamicIsland
             }
             SaveShelf();
             if (added > 0 && _mode != Mode.Expanded)
-                ShowPeek(new PeekData { Key = "alert", Glyph = "", Title = "Étagère", Body = $"{added} élément(s) ajouté(s)", Duration = TimeSpan.FromSeconds(2.5), Width = 320, Height = 68 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE24A", Title = "Étagère", Body = $"{added} élément(s) ajouté(s)", Duration = TimeSpan.FromSeconds(2.5), Width = 320, Height = 68 });
         }
 
         Point _dragStart;
@@ -175,7 +175,7 @@ namespace DynamicIsland
                 SaveShelf();
                 Dispatcher.BeginInvoke(new Action(() => ShowPeek(new PeekData
                 {
-                    Key = "alert", Glyph = "", Title = "Capture enregistrée", Body = path, Duration = TimeSpan.FromSeconds(4), Width = 440, Height = 76,
+                    Key = "alert", Glyph = "\uE248", Title = "Capture enregistrée", Body = path, Duration = TimeSpan.FromSeconds(4), Width = 440, Height = 76,
                     Actions = new() { ("Ouvrir", () => { try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); } catch { } }) }
                 })), DispatcherPriority.Background);
             }
@@ -200,6 +200,28 @@ namespace DynamicIsland
             for (int i = _clips.Count - 1; i >= 0; i--) if (!_clips[i].Pinned) _clips.RemoveAt(i);
         }
 
+        void TogglePin(ClipItem c)
+        {
+            int i = _clips.IndexOf(c);
+            if (i < 0) return;
+            _clips.RemoveAt(i);
+            c.Pinned = !c.Pinned;
+            _clips.Insert(c.Pinned ? 0 : PinnedCount(), c);
+            SavePinned();
+        }
+
+        void ClipPin_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if ((sender as FrameworkElement)?.Tag is ClipItem c) TogglePin(c);
+        }
+
+        void ClipMenu_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if ((sender as FrameworkElement)?.Tag is ClipItem c) ShowClipMenu(c, sender as UIElement);
+        }
+
         int PinnedCount() => _clips.Count(c => c.Pinned);
 
         void SavePinned()
@@ -219,16 +241,13 @@ namespace DynamicIsland
         {
             if ((sender as FrameworkElement)?.Tag is not ClipItem c) return;
             e.Handled = true;
+            ShowClipMenu(c, sender as UIElement);
+        }
+
+        void ShowClipMenu(ClipItem c, UIElement target)
+        {
             var m = NewMenu();
-            m.Items.Add(MenuEntry(c.Pinned ? "Désépingler" : "Épingler", () =>
-            {
-                int i = _clips.IndexOf(c);
-                if (i < 0) return;
-                _clips.RemoveAt(i);
-                c.Pinned = !c.Pinned;
-                _clips.Insert(c.Pinned ? 0 : PinnedCount(), c);
-                SavePinned();
-            }));
+            m.Items.Add(MenuEntry(c.Pinned ? "Désépingler" : "Épingler", () => TogglePin(c)));
             if (c.Png != null)
             {
                 m.Items.Add(MenuEntry("Copier le texte de l'image", () => _ = CopyTextFromImage(c)));
@@ -236,7 +255,7 @@ namespace DynamicIsland
             }
             m.Items.Add(MenuSep());
             m.Items.Add(MenuEntry("Supprimer", () => { _clips.Remove(c); if (c.Pinned) SavePinned(); }));
-            m.PlacementTarget = sender as UIElement;
+            m.PlacementTarget = target;
             m.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             m.IsOpen = true;
         }
@@ -247,15 +266,15 @@ namespace DynamicIsland
             try
             {
                 var text = (await OcrService.ReadAsync(clip.Png) ?? "").Trim();
-                if (text.Length == 0) { Alert("Aucun texte trouvé", "L'image ne contient pas de texte lisible.", "\uE8C8"); return; }
+                if (text.Length == 0) { Alert("Aucun texte trouvé", "L'image ne contient pas de texte lisible.", "\uE1CA"); return; }
                 try { _ignoreClip = true; Clipboard.SetText(text); } catch { _ignoreClip = false; }
                 if (!_clips.Any(c => c.Text == text)) _clips.Insert(PinnedCount(), new ClipItem { Text = text, Time = DateTime.Now });
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE8C8", Title = "Texte copié", Body = text.Replace("\r", "").Replace("\n", " "), Duration = TimeSpan.FromSeconds(4), Width = 440, Height = 76 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE1CA", Title = "Texte copié", Body = text.Replace("\r", "").Replace("\n", " "), Duration = TimeSpan.FromSeconds(4), Width = 440, Height = 76 });
             }
             catch (Exception ex)
             {
                 App.Log(ex);
-                Alert("Lecture du texte impossible", ex.Message, "\uE783");
+                Alert("Lecture du texte impossible", ex.Message, "\uE4E2");
             }
         }
 
@@ -293,7 +312,7 @@ namespace DynamicIsland
             if (Path.GetFileName(path).StartsWith("Unconfirmed", StringComparison.OrdinalIgnoreCase)) return;
             ShowPeek(new PeekData
             {
-                Key = "alert", Image = IconHelper.FromFile(path), Glyph = "", Title = "Téléchargement terminé", Body = Path.GetFileName(path),
+                Key = "alert", Image = IconHelper.FromFile(path), Glyph = "\uE20C", Title = "Téléchargement terminé", Body = Path.GetFileName(path),
                 Duration = TimeSpan.FromSeconds(5), Width = 440, Height = 76,
                 Actions = new()
                 {

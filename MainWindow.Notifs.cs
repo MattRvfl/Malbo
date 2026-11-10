@@ -18,7 +18,11 @@ namespace DynamicIsland
         void InitNotifs()
         {
             NotifList.ItemsSource = _notifs;
-            _notifs.CollectionChanged += (s, e) => NotifEmpty.Visibility = _notifs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            _notifs.CollectionChanged += (s, e) =>
+            {
+                NotifEmpty.Visibility = _notifs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                if (PanelNotif.Visibility == Visibility.Visible) ApplyTabHeight(); // l'île suit le nombre de notifications
+            };
             _notif.Received += d => Dispatcher.InvokeAsync(() => OnNotif(d));
             _ = InitNotifAsync();
         }
@@ -69,7 +73,7 @@ namespace DynamicIsland
             string aumid = d.Aumid, app = d.App;
             ShowPeek(new PeekData
             {
-                Key = "notif", Image = d.Icon, Glyph = "\uEA8F",
+                Key = "notif", Group = d.App ?? "", Image = d.Icon, Glyph = "\uE0CE",
                 Title = (string.IsNullOrEmpty(d.Title) ? d.App : d.Title) + (item.Count > 1 ? $"  ({item.Count})" : ""),
                 Body = string.IsNullOrEmpty(d.Body) ? d.App : $"{d.App} · {d.Body.Replace("\n", " ")}",
                 Duration = TimeSpan.FromSeconds(5), Width = 440, Height = 76,
@@ -122,7 +126,7 @@ namespace DynamicIsland
                 TabNotif.Tag = $"Notifs ({_notifs.Count})";
                 ShowPeek(new PeekData
                 {
-                    Key = "notif", Image = n.Icon as System.Windows.Media.Imaging.BitmapSource, Glyph = "\uE823",
+                    Key = "notif", Image = n.Icon as System.Windows.Media.Imaging.BitmapSource, Glyph = "\uE19A",
                     Title = "Rappel · " + (string.IsNullOrEmpty(n.Title) ? n.App : n.Title),
                     Body = string.IsNullOrEmpty(n.Body) ? n.App : $"{n.App} · {n.Body.Replace("\n", " ")}",
                     Duration = TimeSpan.FromSeconds(6), Width = 440, Height = 76,
@@ -257,7 +261,7 @@ namespace DynamicIsland
                     // appel détecté en local : le bouton coupe le micro pour toutes les applis
                     bool mm = _vol.MicMuted;
                     VoiceMuteBtn.FontFamily = (FontFamily)FindResource("Icons");
-                    VoiceMuteBtn.Content = mm ? "\uEC54" : "\uE720";
+                    VoiceMuteBtn.Content = mm ? "\uE328" : "\uE326";
                     VoiceMuteBtn.ToolTip = mm ? "Réactiver le micro (Ctrl+Alt+M)" : "Couper le micro partout (Ctrl+Alt+M)";
                     VoiceChannel.Text = LocalVoiceLabel();
                     VoiceList.ItemsSource = null;
@@ -271,10 +275,10 @@ namespace DynamicIsland
                     var sig = string.Join("|", users.Select(u => $"{u.Id}:{u.Name}:{u.Speaking}:{u.Muted}"));
                     if (sig != _voiceSig) { _voiceSig = sig; VoiceList.ItemsSource = users; }
                     VoiceMuteBtn.FontFamily = (FontFamily)FindResource("Icons");
-                    VoiceMuteBtn.Content = _discord.SelfMuted ? "\uEC54" : "\uE720";
+                    VoiceMuteBtn.Content = _discord.SelfMuted ? "\uE328" : "\uE326";
                     VoiceMuteBtn.ToolTip = _discord.SelfMuted ? "Réactiver le micro" : "Couper le micro";
                     if (!_wasInChannel)
-                        ShowPeek(new PeekData { Key = "alert", Glyph = "\uE7F6", Title = $"Connecté au salon {name}", Body = "Discord", Duration = TimeSpan.FromSeconds(3), Width = 360, Height = 68 });
+                        ShowPeek(new PeekData { Key = "alert", Glyph = "\uE2A6", Title = $"Connecté au salon {name}", Body = "Discord", Duration = TimeSpan.FromSeconds(3), Width = 360, Height = 68 });
                 }
                 else { _voiceSig = null; VoiceList.ItemsSource = null; }
                 _wasInChannel = inCh;
@@ -324,7 +328,7 @@ namespace DynamicIsland
                 {
                     _callApp = hit.Name; _callProc = hit.Key; _callStart = DateTime.Now;
                     if (!_discord.InChannel)
-                        ShowPeek(new PeekData { Key = "alert", Glyph = "\uE717", Title = _callApp, Body = "Appel en cours" + (S.MeetingDnd ? " · notifications en pause" : ""), Duration = TimeSpan.FromSeconds(2.5), Width = 340, Height = 68 });
+                        ShowPeek(new PeekData { Key = "alert", Glyph = "\uE3BA", Title = _callApp, Body = "Appel en cours" + (S.MeetingDnd ? " · notifications en pause" : ""), Duration = TimeSpan.FromSeconds(2.5), Width = 340, Height = 68 });
                 }
                 UpdateVoiceUI();
             }

@@ -40,7 +40,7 @@
                                     <ColumnDefinition Width="22"/>
                                     <ColumnDefinition/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="chk" FontFamily="{StaticResource Icons}" Text="&#xE73E;" FontSize="11" VerticalAlignment="Center" Visibility="Hidden"/>
+                                <TextBlock x:Name="chk" FontFamily="{StaticResource Icons}" Text="&#xE182;" FontSize="11" VerticalAlignment="Center" Visibility="Hidden"/>
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="False" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
@@ -106,7 +106,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid VerticalAlignment="Center">
                         <Border x:Name="CompactArt" Width="24" Height="24" CornerRadius="7" Visibility="Collapsed"/>
-                        <TextBlock x:Name="CompactIcon" FontFamily="{StaticResource Icons}" Text="&#xE823;" FontSize="13"
+                        <TextBlock x:Name="CompactIcon" FontFamily="{StaticResource Icons}" Text="&#xE19A;" FontSize="13"
                                    Foreground="{DynamicResource SubFg}" Margin="5,0,0,0" VerticalAlignment="Center"/>
                     </Grid>
                     <TextBlock x:Name="CompactText" Grid.Column="1" Foreground="{DynamicResource Fg}" FontSize="12.5" FontWeight="SemiBold"
@@ -147,25 +147,27 @@
                 </Grid>
 
                 <!-- ============ EXPANDED ============ -->
-                <DockPanel x:Name="ExpandedLayer" Width="656" Height="406" Margin="12,12,12,12"
+                <DockPanel x:Name="ExpandedLayer" Width="656" Height="406" Margin="12,12,12,12" KeyboardNavigation.TabNavigation="Cycle"
                            HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed">
                     <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="TabMedia" Style="{StaticResource TabBtn}" Content="&#xE8D6;" Tag="Média" IsChecked="True" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabNotif" Style="{StaticResource TabBtn}" Content="&#xEA8F;" Tag="Notifs" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabTools" Style="{StaticResource TabBtn}" Content="&#xE916;" Tag="Outils" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabFiles" Style="{StaticResource TabBtn}" Content="&#xE8B7;" Tag="Fichiers" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabSystem" Style="{StaticResource TabBtn}" Content="&#xE7F4;" Tag="Système" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabInfo" Style="{StaticResource TabBtn}" Content="&#xE753;" Tag="Infos" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabLaunch" Style="{StaticResource TabBtn}" Content="&#xE71D;" Tag="Lancer" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabMore" Style="{StaticResource TabBtn}" Content="&#xE712;" Tag="Plus" Checked="Tab_Checked"/>
-                            <RadioButton x:Name="TabPlugins" Style="{StaticResource TabBtn}" Content="&#xEA86;" Tag="Plugins" Checked="Tab_Checked"/>
+                        <!-- Onglets principaux + bouton « Plus » (les autres onglets) : ordre et répartition dans MainWindow.Tabs.cs -->
+                        <StackPanel x:Name="TabBar" Orientation="Horizontal">
+                            <RadioButton x:Name="TabMedia" Style="{StaticResource TabBtn}" Content="&#xE340;" Tag="Média" IsChecked="True" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabNotif" Style="{StaticResource TabBtn}" Content="&#xE0CE;" Tag="Notifs" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabTools" Style="{StaticResource TabBtn}" Content="&#xE492;" Tag="Outils" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabFiles" Style="{StaticResource TabBtn}" Content="&#xE24A;" Tag="Fichiers" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabSystem" Style="{StaticResource TabBtn}" Content="&#xE628;" Tag="Système" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabInfo" Style="{StaticResource TabBtn}" Content="&#xE540;" Tag="Infos" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabLaunch" Style="{StaticResource TabBtn}" Content="&#xE3FE;" Tag="Lancer" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabMore" Style="{StaticResource TabBtn}" Content="&#xE464;" Tag="Bureau" Checked="Tab_Checked"/>
+                            <RadioButton x:Name="TabPlugins" Style="{StaticResource TabBtn}" Content="&#xE596;" Tag="Plugins" Checked="Tab_Checked"/>
+                            <Button x:Name="MoreTabsBtn" Style="{StaticResource IconBtn}" Content="&#xE1FE;" Width="30" Height="30" ToolTip="Autres onglets" Click="MoreTabs_Click"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Image Source="Assets/malbo.png" Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Malbo" RenderOptions.BitmapScalingMode="HighQuality"/>
                             <TextBlock x:Name="HeaderClock" Foreground="{DynamicResource SubFg}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <Button x:Name="PinBtn" Style="{StaticResource IconBtn}" Content="&#xE718;" ToolTip="Épingler ouvert (Ctrl+Alt+I)" Click="Pin_Click"/>
-                            <Button Style="{StaticResource IconBtn}" Content="&#xE713;" ToolTip="Réglages" Click="Settings_Click"/>
+                            <Button x:Name="PinBtn" Style="{StaticResource IconBtn}" Content="&#xE3E2;" ToolTip="Épingler ouvert (Ctrl+Alt+I)" Click="Pin_Click"/>
+                            <Button Style="{StaticResource IconBtn}" Content="&#xE270;" ToolTip="Réglages" Click="Settings_Click"/>
                         </StackPanel>
                     </Grid>
 
@@ -185,17 +187,17 @@
                                         <ColumnDefinition/>
                                     </Grid.ColumnDefinitions>
                                     <Border x:Name="BigArt" Width="92" Height="92" CornerRadius="14" Background="{DynamicResource CardBg}">
-                                        <TextBlock x:Name="BigArtGlyph" FontFamily="{StaticResource Icons}" Text="&#xE8D6;" FontSize="30"
+                                        <TextBlock x:Name="BigArtGlyph" FontFamily="{StaticResource Icons}" Text="&#xE340;" FontSize="30"
                                                    Foreground="{DynamicResource SubFg}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                                         <TextBlock x:Name="MediaTitle" Text="Rien en lecture" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock x:Name="MediaArtist" FontSize="12.5" Foreground="{DynamicResource SubFg}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <TextBlock x:Name="MediaApp" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
-                                            <Button x:Name="LikeBtn" Style="{StaticResource IconBtn}" Content="&#xEB51;" FontSize="12" Width="24" Height="24" Margin="4,0,0,0"
+                                            <TextBlock x:Name="MediaApp" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                                            <Button x:Name="LikeBtn" Style="{StaticResource IconBtn}" Content="&#xE2A8;" FontSize="12" Width="24" Height="24" Margin="4,0,0,0"
                                                     ToolTip="J'aime" Visibility="Collapsed" Click="Like_Click"/>
-                                            <Button x:Name="PlaylistBtn" Style="{StaticResource IconBtn}" Content="&#xECC8;" FontSize="12" Width="24" Height="24"
+                                            <Button x:Name="PlaylistBtn" Style="{StaticResource IconBtn}" Content="&#xE6AA;" FontSize="12" Width="24" Height="24"
                                                     ToolTip="Ajouter à une playlist" Visibility="Collapsed" Click="Playlist_Click"/>
                                         </StackPanel>
                                     </StackPanel>
@@ -206,12 +208,12 @@
                                     <TextBlock x:Name="MediaDur" Text="0:00" Style="{StaticResource Sub}" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
-                                    <Button x:Name="ShuffleBtn" Style="{StaticResource IconBtn}" Content="&#xE8B1;" Click="Shuffle_Click" Width="34" Height="34" FontSize="14"
+                                    <Button x:Name="ShuffleBtn" Style="{StaticResource IconBtn}" Content="&#xE422;" Click="Shuffle_Click" Width="34" Height="34" FontSize="14"
                                             Opacity="0.45" ToolTip="Lecture aléatoire" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Style="{StaticResource IconBtn}" Content="&#xE892;" Click="Prev_Click" Width="40" Height="40" FontSize="17" VerticalAlignment="Center"/>
-                                    <Button x:Name="PlayBtn" Style="{StaticResource IconBtn}" Content="&#xE768;" Click="Play_Click" Width="48" Height="48" FontSize="22" Margin="8,0"/>
-                                    <Button Style="{StaticResource IconBtn}" Content="&#xE893;" Click="Next_Click" Width="40" Height="40" FontSize="17" VerticalAlignment="Center"/>
-                                    <Button x:Name="RepeatBtn" Style="{StaticResource IconBtn}" Content="&#xE8EE;" Click="Repeat_Click" Width="34" Height="34" FontSize="14"
+                                    <Button Style="{StaticResource IconBtn}" Content="&#xE5A4;" Click="Prev_Click" Width="40" Height="40" FontSize="17" FontFamily="{StaticResource IconsFill}" ToolTip="Précédent" VerticalAlignment="Center"/>
+                                    <Button x:Name="PlayBtn" Style="{StaticResource IconBtn}" Content="&#xE3D0;" Click="Play_Click" Width="48" Height="48" FontSize="24" FontFamily="{StaticResource IconsFill}" ToolTip="Lecture / pause (Ctrl+Alt+Espace)" Margin="8,0"/>
+                                    <Button Style="{StaticResource IconBtn}" Content="&#xE5A6;" Click="Next_Click" Width="40" Height="40" FontSize="17" FontFamily="{StaticResource IconsFill}" ToolTip="Suivant" VerticalAlignment="Center"/>
+                                    <Button x:Name="RepeatBtn" Style="{StaticResource IconBtn}" Content="&#xE3F6;" Click="Repeat_Click" Width="34" Height="34" FontSize="14"
                                             Opacity="0.45" ToolTip="Répéter" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <TextBlock DockPanel.Dock="Top" Text="VOLUME PAR APPLICATION" Style="{StaticResource Sub}" FontWeight="SemiBold" Margin="2,0,0,4"/>
@@ -278,7 +280,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE767;" FontSize="13" Foreground="#FF30D158" VerticalAlignment="Center"/>
+                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE584;" FontSize="13" Foreground="#FF30D158" VerticalAlignment="Center"/>
                                             <TextBlock x:Name="VoiceChannel" Style="{StaticResource H}" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                         </StackPanel>
                                         <ItemsControl x:Name="VoiceList" Margin="0,6,0,0">
@@ -301,7 +303,7 @@
                                                         <Ellipse x:Name="ring" Stroke="#FF30D158" StrokeThickness="2.5" Visibility="Hidden"/>
                                                         <Border Width="15" Height="15" CornerRadius="7.5" Background="#FFFF453A" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                                 Margin="0,0,-2,-2" Visibility="{Binding MutedVis}">
-                                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xF781;" FontSize="8" Foreground="White"
+                                                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE328;" FontSize="8" Foreground="White"
                                                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                         </Border>
                                                     </Grid>
@@ -314,12 +316,12 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                     </StackPanel>
-                                    <Button x:Name="VoiceMuteBtn" Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE720;" VerticalAlignment="Top"
+                                    <Button x:Name="VoiceMuteBtn" Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE326;" VerticalAlignment="Top"
                                             ToolTip="Couper / rétablir mon micro" Click="VoiceMute_Click"/>
                                 </Grid>
                             </Border>
                             <Grid>
-                                <TextBlock x:Name="NotifEmpty" Text="Aucune notification pour l'instant.&#x0a;Discord, Telegram, WhatsApp, Messenger, Slack, Teams, mails… apparaîtront ici."
+                                <TextBlock x:Name="NotifEmpty" Text="Aucune notification"
                                            Style="{StaticResource Sub}" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl x:Name="NotifList">
@@ -343,8 +345,8 @@
                                                             <TextBlock Text="{Binding Body}" Foreground="{DynamicResource Fg}" Opacity="0.85" FontSize="12" TextWrapping="Wrap" MaxHeight="64" TextTrimming="CharacterEllipsis"/>
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
-                                                            <Button Style="{StaticResource IconBtn}" Content="&#xE823;" FontSize="11" Width="26" Height="26" Tag="{Binding}" ToolTip="Me le rappeler plus tard" Click="NotifSnooze_Click"/>
-                                                            <Button Style="{StaticResource IconBtn}" Content="&#xE711;" FontSize="11" Width="26" Height="26" Tag="{Binding}" Click="NotifDismiss_Click"/>
+                                                            <Button Style="{StaticResource IconBtn}" Content="&#xE19A;" FontSize="11" Width="26" Height="26" Tag="{Binding}" ToolTip="Me le rappeler plus tard" Click="NotifSnooze_Click"/>
+                                                            <Button Style="{StaticResource IconBtn}" Content="&#xE4F6;" FontSize="11" Width="26" Height="26" Tag="{Binding}" Click="NotifDismiss_Click"/>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>
@@ -398,7 +400,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="AlarmTime" Style="{StaticResource Input}" Text="07:30" ToolTip="HH:mm"/>
                                         <TextBox x:Name="AlarmLabel" Grid.Column="1" Style="{StaticResource Input}" Margin="4,0" Text="Rappel"/>
-                                        <Button Grid.Column="2" Style="{StaticResource IconBtn}" Content="&#xE710;" Width="28" Height="28" Click="AddAlarm_Click"/>
+                                        <Button Grid.Column="2" Style="{StaticResource IconBtn}" Content="&#xE3D4;" Width="28" Height="28" Click="AddAlarm_Click"/>
                                     </Grid>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl x:Name="AlarmList">
@@ -413,7 +415,7 @@
                                                             <TextBlock Text="{Binding Time}" Foreground="{DynamicResource Fg}" FontSize="18" FontWeight="Light"/>
                                                             <TextBlock Text="{Binding Label}" Style="{StaticResource Sub}" TextTrimming="CharacterEllipsis"/>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE74D;" FontSize="12" Width="26" Height="26" Tag="{Binding}" Click="AlarmDelete_Click"/>
+                                                        <Button Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE4A6;" FontSize="12" Width="26" Height="26" Tag="{Binding}" Click="AlarmDelete_Click"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -437,7 +439,7 @@
                                                         <CheckBox IsChecked="{Binding Done, Mode=TwoWay}" Click="Todo_Changed" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"/>
                                                         </CheckBox>
-                                                        <Button Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE711;" FontSize="10" Width="22" Height="22" Tag="{Binding}" Click="TodoDelete_Click"/>
+                                                        <Button Grid.Column="1" Style="{StaticResource IconBtn}" Content="&#xE4F6;" FontSize="11" Width="22" Height="22" Tag="{Binding}" Click="TodoDelete_Click"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -459,7 +461,7 @@
                                         <TextBlock Text="Étagère" Style="{StaticResource H}" VerticalAlignment="Center"/>
                                         <Button Style="{StaticResource PillBtn}" Content="Vider" HorizontalAlignment="Right" Click="ShelfClear_Click"/>
                                     </Grid>
-                                    <TextBlock DockPanel.Dock="Top" Text="Glisse des fichiers sur l'île pour les garder ici, puis fais-les glisser où tu veux."
+                                    <TextBlock DockPanel.Dock="Top" Text="Glisse des fichiers sur l'île pour les garder sous la main."
                                                Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="0,4,0,6"/>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl x:Name="ShelfList">
@@ -476,8 +478,8 @@
                                                             </Grid.ColumnDefinitions>
                                                             <Image Source="{Binding Icon}" Width="22" Height="22"/>
                                                             <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{DynamicResource Fg}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0"/>
-                                                            <Button Grid.Column="2" Style="{StaticResource IconBtn}" Content="&#xE8A7;" FontSize="11" Width="24" Height="24" ToolTip="Ouvrir" Tag="{Binding}" Click="ShelfOpen_Click"/>
-                                                            <Button Grid.Column="3" Style="{StaticResource IconBtn}" Content="&#xE711;" FontSize="10" Width="24" Height="24" ToolTip="Retirer" Tag="{Binding}" Click="ShelfRemove_Click"/>
+                                                            <Button Grid.Column="2" Style="{StaticResource IconBtn}" Content="&#xE5DE;" FontSize="11" Width="24" Height="24" ToolTip="Ouvrir" Tag="{Binding}" Click="ShelfOpen_Click"/>
+                                                            <Button Grid.Column="3" Style="{StaticResource IconBtn}" Content="&#xE4F6;" FontSize="11" Width="24" Height="24" ToolTip="Retirer" Tag="{Binding}" Click="ShelfRemove_Click"/>
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>
@@ -492,19 +494,29 @@
                                         <TextBlock Text="Presse-papiers" Style="{StaticResource H}" VerticalAlignment="Center"/>
                                         <Button Style="{StaticResource PillBtn}" Content="Effacer" HorizontalAlignment="Right" Click="ClipClear_Click"/>
                                     </Grid>
-                                    <TextBlock DockPanel.Dock="Top" Text="Clic : recopier · clic droit : épingler, lire le texte d'une image, supprimer." Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                                    <TextBox x:Name="ClipSearch" DockPanel.Dock="Top" Style="{StaticResource Input}" Margin="0,0,0,6" ToolTip="Rechercher dans l'historique" TextChanged="ClipSearch_Changed"/>
+                                                                        <TextBox x:Name="ClipSearch" DockPanel.Dock="Top" Style="{StaticResource Input}" Margin="0,6,0,6" ToolTip="Rechercher dans l'historique" TextChanged="ClipSearch_Changed"/>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl x:Name="ClipList">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Background="{DynamicResource CardHover}" CornerRadius="10" Padding="8,6" Margin="0,2" Cursor="Hand"
                                                             Tag="{Binding}" MouseLeftButtonUp="Clip_Click" MouseRightButtonUp="Clip_RightClick">
-                                                        <StackPanel>
-                                                            <Image Source="{Binding Image}" MaxHeight="70" HorizontalAlignment="Left" Visibility="{Binding ImageVis}"/>
-                                                            <TextBlock Text="{Binding Preview}" Foreground="{DynamicResource Fg}" FontSize="11.5" TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                                            <TextBlock Text="{Binding Footer}" Style="{StaticResource Sub}" FontSize="10"/>
-                                                        </StackPanel>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <Image Source="{Binding Image}" MaxHeight="70" HorizontalAlignment="Left" Visibility="{Binding ImageVis}"/>
+                                                                <TextBlock Text="{Binding Preview}" Foreground="{DynamicResource Fg}" FontSize="12" TextWrapping="Wrap" MaxHeight="34" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding Footer}" Style="{StaticResource Sub}"/>
+                                                            </StackPanel>
+                                                            <!-- actions visibles (plus besoin de deviner le clic droit) -->
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                                                <Button Style="{StaticResource IconBtn}" Content="&#xE3E2;" FontSize="12" Width="24" Height="24" Tag="{Binding}" ToolTip="Épingler / désépingler" Click="ClipPin_Click"/>
+                                                                <Button Style="{StaticResource IconBtn}" Content="&#xE1FE;" FontSize="12" Width="24" Height="24" Tag="{Binding}" ToolTip="Plus d'actions" Click="ClipMenu_Click"/>
+                                                            </StackPanel>
+                                                        </Grid>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -561,7 +573,7 @@
                                     <DockPanel>
                                         <Grid DockPanel.Dock="Top">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock x:Name="WeatherIcon" Text="☀" FontFamily="Segoe UI Emoji, Segoe UI Symbol" FontSize="26" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="WeatherIcon" Text="&#xE472;" FontFamily="{StaticResource Icons}" FontSize="28" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
                                                 <TextBlock x:Name="WeatherTemp" Text="--°" FontSize="30" FontWeight="Light" Foreground="{DynamicResource Fg}" Margin="8,0,0,0"/>
                                             </StackPanel>
                                         </Grid>
@@ -633,7 +645,7 @@
                                                FontFamily="Segoe UI Variable Display, Segoe UI" Margin="2,8,0,0" Cursor="Hand" ToolTip="Cliquer pour copier"
                                                TextTrimming="CharacterEllipsis" MouseLeftButtonUp="CalcResult_Click"/>
                                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource Sub}" TextWrapping="Wrap" Margin="2,2,0,6"
-                                               Text="Ex. : 12*(3+4) · 10 mi en km · 100 USD en EUR · 15 min thé (minuteur) · nom d'une appli + Entrée"/>
+                                               Text="12*(3+4) · 10 mi en km · 15 min thé · nom d'une appli"/>
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl x:Name="CalcHistory" ItemTemplate="{StaticResource InfoRowTpl}"/>
                                     </ScrollViewer>
@@ -671,7 +683,7 @@
                         <Grid x:Name="PanelPlugins" Visibility="Collapsed">
                             <TextBlock x:Name="PluginEmpty" Style="{StaticResource Sub}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40,0"
-                                       Text="Aucun plugin. Dépose une DLL implémentant IIslandPlugin dans %AppData%\Malbo\plugins puis relance l'app."/>
+                                       Text="Aucun plugin installé. Dossier : Réglages › Avancé."/>
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <WrapPanel x:Name="PluginHost"/>
                             </ScrollViewer>

@@ -91,7 +91,7 @@ namespace DynamicIsland
             e.Handled = true;
             if (_mode != Mode.Expanded)
             {
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE8C8", Title = "Copié", Body = t, Duration = TimeSpan.FromSeconds(1.5), Width = 260, Height = 48 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE1CA", Title = "Copié", Body = t, Duration = TimeSpan.FromSeconds(1.5), Width = 260, Height = 48 });
                 return;
             }
             // île ouverte : les peeks attendraient la fermeture → retour visuel sur place
@@ -167,7 +167,7 @@ namespace DynamicIsland
             {
                 var g = new TextBlock
                 {
-                    Text = IsWebUrl(target) ? "\uE774" : target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ? "\uE713" : "\uE8B7",
+                    Text = IsWebUrl(target) ? "\uE288" : target.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ? "\uE270" : "\uE24A",
                     FontFamily = (FontFamily)FindResource("Icons"), FontSize = 24, Height = 30,
                     HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center
                 };
@@ -252,11 +252,11 @@ namespace DynamicIsland
         void BuildPower()
         {
             PowerHost.Children.Clear();
-            AddPower("\uE72E", "Verrouiller", false, AppLauncher.Lock);
-            AddPower("\uE708", "Veille", true, AppLauncher.Sleep);
-            AddPower("\uE777", "Redémarrer", true, AppLauncher.Restart);
-            AddPower("\uE7E8", "Éteindre", true, AppLauncher.Shutdown);
-            AddPower("\uF3B1", "Déconnexion", true, AppLauncher.Logoff);
+            AddPower("\uE2FA", "Verrouiller", false, AppLauncher.Lock);
+            AddPower("\uE330", "Veille", true, AppLauncher.Sleep);
+            AddPower("\uE036", "Redémarrer", true, AppLauncher.Restart);
+            AddPower("\uE3DA", "Éteindre", true, AppLauncher.Shutdown);
+            AddPower("\uE42A", "Déconnexion", true, AppLauncher.Logoff);
         }
 
         void AddPower(string glyph, string label, bool confirm, Action act)
@@ -320,7 +320,7 @@ namespace DynamicIsland
             if (repo.Length == 0)
             {
                 const string none = "Aucun dépôt GitHub configuré (Réglages › Mises à jour).";
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE946", Title = "Mises à jour", Body = none, Duration = TimeSpan.FromSeconds(4), Width = 420, Height = 76 });
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE2CE", Title = "Mises à jour", Body = none, Duration = TimeSpan.FromSeconds(4), Width = 420, Height = 76 });
                 return none;
             }
 
@@ -330,14 +330,14 @@ namespace DynamicIsland
             {
                 App.Log(ex);
                 var err = "Vérification impossible : " + ex.Message;
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE783", Title = "Mises à jour", Body = err, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 });
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE4E2", Title = "Mises à jour", Body = err, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 });
                 return err;
             }
 
             if (u == null)
             {
                 var ok = $"Malbo est à jour (version {Updater.CurrentName}).";
-                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE73E", Title = "Malbo est à jour", Body = $"Version {Updater.CurrentName}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
+                if (manual) ShowPeek(new PeekData { Key = "alert", Glyph = "\uE182", Title = "Malbo est à jour", Body = $"Version {Updater.CurrentName}", Duration = TimeSpan.FromSeconds(3), Width = 340, Height = 68 });
                 return ok;
             }
 
@@ -352,7 +352,7 @@ namespace DynamicIsland
             var notes = (u.Notes ?? "").Split('\n').Select(l => l.Trim().TrimStart('#', '-', '*', ' ')).FirstOrDefault(l => l.Length > 0);
             ShowPeek(new PeekData
             {
-                Key = "alert", Glyph = "\uE896",
+                Key = "alert", Glyph = "\uE20C",
                 Title = $"Mise à jour {u.Name} dispo",
                 Body = string.IsNullOrEmpty(notes) ? $"Version actuelle : {Updater.CurrentName}" : notes,
                 Duration = TimeSpan.FromSeconds(12), Width = 460, Height = 76,
@@ -378,13 +378,13 @@ namespace DynamicIsland
             _updating = true;
             try
             {
-                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE896", Title = "Mise à jour en cours…", Body = $"Malbo {u.Name} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE20C", Title = "Mise à jour en cours…", Body = $"Malbo {u.Name} va redémarrer", Duration = TimeSpan.FromSeconds(4), Width = 360, Height = 68 });
                 await Updater.ApplyAsync(u);
             }
             catch (Exception ex)
             {
                 App.Log(ex);
-                Alert("Mise à jour impossible", ex.Message, "\uE783");
+                Alert("Mise à jour impossible", ex.Message, "\uE4E2");
             }
             finally { _updating = false; }
         }

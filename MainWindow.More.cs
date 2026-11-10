@@ -94,6 +94,9 @@ namespace DynamicIsland
                 _notesSave.Tick += (s, e) => { _notesSave.Stop(); S.Notes = _notesBox.Text; S.Save(); };
                 right.Children.Add(MoreCard("Notes rapides", "Enregistrées automatiquement.", _notesBox));
 
+                // --- Astuces : tout ce qui ne se voit pas (gestes, raccourcis) ---
+                left.Children.Add(MoreCard("Astuces", null, TipsPanel()));
+
                 BuildToggles();
                 BuildProfiles();
                 RefreshHistory();
@@ -102,13 +105,77 @@ namespace DynamicIsland
 
             _live.Changed += () => Dispatcher.InvokeAsync(OnLiveChanged);
             _live.Notify += (t, b) => Dispatcher.InvokeAsync(() =>
-                ShowPeek(new PeekData { Key = "alert", Glyph = "", Title = t, Body = b, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 }));
+                ShowPeek(new PeekData { Key = "alert", Glyph = "\uE000", Title = t, Body = b, Duration = TimeSpan.FromSeconds(5), Width = 420, Height = 76 }));
             _live.Finished += a => Dispatcher.InvokeAsync(() =>
             {
-                if (a.IsTimer) Alert(a.Title, "Minuteur terminé ⏰", "");
-                else Alert(a.Title, string.IsNullOrEmpty(a.Body) ? "Terminé ✔" : a.Body, "");
+                if (a.IsTimer) Alert(a.Title, "Minuteur terminé", "\uE492");
+                else Alert(a.Title, string.IsNullOrEmpty(a.Body) ? "Terminé ✔" : a.Body, "\uE182");
             });
             ApplyLiveApi();
+        }
+
+        static readonly (string Icon, string Text)[] Tips =
+        {
+            (Ico.Keyboard, "Ctrl+Alt+I ouvre et épingle l'île · Ctrl+Alt+H la masque"),
+            (Ico.Play, "Ctrl+Alt+Espace ou clic molette sur l'île : lecture / pause"),
+            (Ico.SpeakerHigh, "Molette sur l'île fermée : volume"),
+            (Ico.MicrophoneSlash, "Ctrl+Alt+M coupe le micro pour toutes les applis"),
+            (Ico.X, "Glisse un aperçu vers le haut pour le fermer · Échap referme l'île"),
+            (Ico.Bell, "Glisse une notification sur le côté pour la supprimer"),
+            (Ico.AppWindow, "Ctrl+Tab ou Ctrl+1…9 : changer d'onglet · Tab : parcourir les boutons"),
+            (Ico.Timer, "Dans Lancer : « 15 min thé » crée un minuteur, un nom d'appli l'ouvre"),
+            (Ico.Folder, "Glisse un fichier sur l'île pour le garder sous la main"),
+            (Ico.Gear, "Clic droit sur l'île : menu rapide"),
+        };
+
+        StackPanel TipsPanel()
+        {
+            var sp = new StackPanel();
+            foreach (var (icon, text) in Tips)
+            {
+                var row = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
+                var g = new TextBlock { Text = icon, FontFamily = (FontFamily)FindResource("Icons"), FontSize = 13, Width = 22, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 0, 0) };
+                g.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+                DockPanel.SetDock(g, Dock.Left);
+                row.Children.Add(g);
+                var t = new TextBlock { Text = text, FontSize = 11.5, TextWrapping = TextWrapping.Wrap };
+                t.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                row.Children.Add(t);
+                sp.Children.Add(row);
+            }
+            return sp;
+        }
+
+        /// <summary>Au tout premier lancement : un aperçu qui mène aux astuces (gestes et raccourcis ne se devinent pas).</summary>
+        void FirstRunTip()
+        {
+            if (S.TipsShown) return;
+            S.TipsShown = true;
+            S.Save();
+            var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+            t.Tick += (s, e) =>
+            {
+                t.Stop();
+                ShowPeek(new PeekData
+                {
+                    Key = "alert", Glyph = Ico.Lightbulb, Title = "Bienvenue dans Malbo", Body = "Survole l'île pour l'ouvrir. Gestes et raccourcis : voir les astuces.",
+                    Duration = TimeSpan.FromSeconds(10), Width = 500, Height = 76,
+                    Actions = new() { ("Astuces", () => { Expand(); TabMore.IsChecked = true; SetPinned(true); }) }
+                });
+            };
+            t.Start();
+        }
+
+        /// <summary>Vérifie que la police d'icônes embarquée est bien chargée ; sinon on le note dans error.log (les icônes seraient des carrés).</summary>
+        void CheckIconFont()
+        {
+            try
+            {
+                var fams = Fonts.GetFontFamilies(new Uri("pack://application:,,,/Assets/Fonts/")).Select(f => f.Source).ToList();
+                if (!fams.Any(f => f.Contains("Phosphor-Bold")) || !fams.Any(f => f.Contains("Phosphor-Fill")))
+                    App.Log(new InvalidOperationException("Police d'icônes Phosphor introuvable dans les ressources. Familles vues : " + string.Join(", ", fams)));
+            }
+            catch (Exception ex) { App.Log(ex); }
         }
 
         /// <summary>Démarre ou arrête l'API locale selon les réglages.</summary>
@@ -243,7 +310,7 @@ namespace DynamicIsland
                     sp.Children.Add(new ProgressBar { Style = (Style)FindResource("Thin"), Maximum = 1, Value = LiveProgress(a), Margin = new Thickness(0, 4, 0, 0) });
                 g.Children.Add(sp);
                 var id = a.Id;
-                var x = new Button { Style = (Style)FindResource("IconBtn"), Content = "", FontSize = 10, Width = 24, Height = 24, ToolTip = "Retirer", VerticalAlignment = VerticalAlignment.Top };
+                var x = new Button { Style = (Style)FindResource("IconBtn"), Content = "\uE4F6", FontSize = 10, Width = 24, Height = 24, ToolTip = "Retirer", VerticalAlignment = VerticalAlignment.Top };
                 x.Click += (s, e) => _live.Remove(id);
                 Grid.SetColumn(x, 1);
                 g.Children.Add(x);
@@ -281,7 +348,7 @@ namespace DynamicIsland
         {
             _live.Set(new LiveActivity
             {
-                Id = "timer:" + Guid.NewGuid().ToString("N").Substring(0, 8), Title = name, Glyph = "",
+                Id = "timer:" + Guid.NewGuid().ToString("N").Substring(0, 8), Title = name, Glyph = "\uE492",
                 StartedAt = DateTime.Now, EndsAt = DateTime.Now + dur
             });
         }
@@ -383,8 +450,8 @@ namespace DynamicIsland
         {
             var r = _vol.ToggleMicMute();
             UpdateMicBtn();
-            if (r == null) { ShowPeek(new PeekData { Key = "alert", Glyph = "", Title = "Aucun micro détecté", Duration = TimeSpan.FromSeconds(2), Width = 280, Height = 48 }); return; }
-            ShowPeek(new PeekData { Key = "osd", Glyph = r.Value ? "" : "", Title = r.Value ? "Micro coupé" : "Micro réactivé", Duration = TimeSpan.FromSeconds(1.6), Width = 260, Height = 48 });
+            if (r == null) { ShowPeek(new PeekData { Key = "alert", Glyph = "\uE326", Title = "Aucun micro détecté", Duration = TimeSpan.FromSeconds(2), Width = 280, Height = 48 }); return; }
+            ShowPeek(new PeekData { Key = "osd", Glyph = r.Value ? "\uE328" : "\uE326", Title = r.Value ? "Micro coupé" : "Micro réactivé", Duration = TimeSpan.FromSeconds(1.6), Width = 260, Height = 48 });
             UpdateVoiceUI();
         }
 
@@ -433,7 +500,7 @@ namespace DynamicIsland
                     {
                         try { _ignoreClip = true; Clipboard.SetText(value); } catch { _ignoreClip = false; }
                         Dispatcher.BeginInvoke(new Action(() =>
-                            ShowPeek(new PeekData { Key = "alert", Glyph = "", Title = title, Body = value, Duration = TimeSpan.FromSeconds(3), Width = 320, Height = 68 })), DispatcherPriority.Background);
+                            ShowPeek(new PeekData { Key = "alert", Glyph = "\uE568", Title = title, Body = value, Duration = TimeSpan.FromSeconds(3), Width = 320, Height = 68 })), DispatcherPriority.Background);
                     };
                     p.Show();
                 }

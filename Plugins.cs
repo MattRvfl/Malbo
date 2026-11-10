@@ -14,7 +14,7 @@ namespace DynamicIsland
     public interface IIslandPlugin
     {
         string Name { get; }
-        string Glyph { get; }          // glyphe Segoe Fluent Icons, ex. ""
+        string Glyph { get; }          // glyphe Segoe Fluent Icons, ex. "\uE46A"
         UIElement CreateView();
     }
 

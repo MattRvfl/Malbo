@@ -54,7 +54,7 @@ namespace DynamicIsland
             if (_tm == TMode.Timer)
             {
                 _tRun = false;
-                Alert("Minuteur terminé", $"{FmtT(_tTotal)} écoulées ⏰", "\uE916");
+                Alert("Minuteur terminé", $"{FmtT(_tTotal)} écoulées", "\uE492");
             }
             else if (_tm == TMode.Pomo)
             {
@@ -63,7 +63,7 @@ namespace DynamicIsland
                 _tTotal = _tLeft = TimeSpan.FromMinutes(_pomoWork ? S.PomodoroWork : S.PomodoroBreak);
                 Alert(_pomoWork ? "Au travail !" : "Pause !",
                       _pomoWork ? $"Cycle {_pomoCycle} · {S.PomodoroWork} min de concentration" + (S.FocusDnd ? " · notifications en pause" : "") : $"{S.PomodoroBreak} min de pause bien méritée",
-                      "\uE916");
+                      "\uE492");
             }
             UpdateTimerUI();
             UpdateCompact();
@@ -133,7 +133,7 @@ namespace DynamicIsland
             if (!S.FocusDnd) return;
             ShowPeek(new PeekData
             {
-                Key = "alert", Glyph = "\uE708", Title = "Focus",
+                Key = "alert", Glyph = "\uE330", Title = "Focus",
                 Body = $"Notifications en pause pendant {Math.Ceiling(_tLeft.TotalMinutes)} min",
                 Duration = TimeSpan.FromSeconds(3), Width = 360, Height = 68
             });
@@ -182,7 +182,7 @@ namespace DynamicIsland
             {
                 var key = DateTime.Today.ToString("yyyyMMdd") + a.Time + a.Label;
                 if (a.Time == now && _firedAlarms.Add(key))
-                    Alert(a.Label, $"Il est {a.Time}", "\uEA8F");
+                    Alert(a.Label, $"Il est {a.Time}", "\uE0CE");
             }
         }
 

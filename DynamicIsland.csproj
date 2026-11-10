@@ -10,7 +10,7 @@
     <AssemblyName>Malbo</AssemblyName>
     <ApplicationIcon>Assets\malbo.ico</ApplicationIcon>
     <Product>Malbo</Product>
-    <Version>1.3.0-alpha</Version>
+    <Version>1.3.0-alpha.2</Version>
     <RootNamespace>DynamicIsland</RootNamespace>
     <NoWarn>CA1416;CS4014;CS1998</NoWarn>
     <!-- Mémoire : GC poste de travail sans thread de fond, rend la RAM au système, ressources en français uniquement. -->
@@ -31,5 +31,7 @@
   <ItemGroup>
     <Resource Include="Assets\malbo.png" />
     <Resource Include="Assets\malbo.ico" />
+    <Resource Include="Assets\Fonts\Phosphor-Bold.ttf" />
+    <Resource Include="Assets\Fonts\Phosphor-Fill.ttf" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,106 @@
+[
+ {
+  "tag_name": "v1.3.1",
+  "name": "Malbo v1.3.1",
+  "body": "<!-- prerelease -->\r\n# Malbo 1.3.1\r\n\r\n> ⚠️ **Pré-version.** Tout compile, mais rien n'a encore été testé sur un vrai PC : attends-toi à des bugs, surtout d'affichage. Si toutes les icônes apparaissent comme des carrés, envoie `%AppData%\\Malbo\\error.log`.\r\n\r\nRemplace les versions `1.3.0-alpha` et `1.3.0-alpha.2` (même contenu que l'alpha 2, renommée).\r\n\r\n# Interface\r\n\r\n## 🎨 Nouvelles icônes\r\n- Toutes les icônes passent à **[Phosphor Icons](https://phosphoricons.com)** (licence MIT), embarquées dans l'exe : même rendu sur Windows 10 et 11.\r\n- Boutons de lecture pleins, cœur et punaise pleins quand ils sont actifs.\r\n- La météo utilise les mêmes icônes que le reste (plus d'emojis mélangés).\r\n\r\n## 🧭 Onglets\r\n- **5 onglets principaux** dans la barre (Média, Notifs, Outils, Système, Lancer), les autres derrière le bouton **« … »**.\r\n- Ordre et choix réglables : Réglages › Onglets.\r\n- L'ancien onglet « Plus » s'appelle maintenant **Bureau**.\r\n\r\n## 📐 Île qui s'adapte\r\n- La hauteur de l'île ouverte suit le contenu pour les notifications, les fichiers et les plugins, au lieu d'un grand panneau fixe.\r\n- Nouveau réglage **Décalage vers le bas** pour ne plus recouvrir les onglets du navigateur.\r\n\r\n## ⌨️ Clavier et saisie\r\n- L'île **reste ouverte tant que tu tapes** dans un champ.\r\n- `Échap` la referme, `Ctrl+Tab` et `Ctrl+1…9` changent d'onglet, `Tab` parcourt les boutons (avec un anneau de focus visible).\r\n\r\n## 🔎 Plus rien de caché\r\n- Boutons visibles pour épingler un élément du presse-papiers et ouvrir ses actions.\r\n- Carte **Astuces** dans l'onglet Bureau (gestes et raccourcis), et message de bienvenue au premier lancement.\r\n- Infobulles sur les boutons qui n'en avaient pas.\r\n\r\n## ⚙️ Réglages\r\n- Fenêtre découpée en **catégories** avec un menu à gauche et une **recherche**.\r\n- Elle suit le thème clair / sombre de l'île ; les listes déroulantes Windows sont remplacées par des boutons au style de l'app.\r\n\r\n## 👁 Lisibilité\r\n- La couleur d'accent tirée de la pochette est corrigée pour rester **lisible** sur le fond.\r\n- Textes les plus petits agrandis, messages d'état vide raccourcis.\r\n- **File d'aperçus** limitée : 3 en attente au plus, un seul par appli, et ils passent plus vite quand d'autres attendent.\r\n\r\n# Fonctionnalités\r\n\r\n### Nouvel onglet « Bureau »\r\n- **Fenêtres ouvertes** : la liste des fenêtres, un clic bascule dessus.\r\n- **Sortie audio** : choisir casque ou enceintes sans quitter l'île.\r\n- **Actions rapides** : micro coupé partout, Wi-Fi, Bluetooth, pipette + règle, clip de jeu (Xbox Game Bar), raccourcis vers le mode nuit et l'économie d'énergie.\r\n- **Notes rapides**, enregistrées toutes seules.\r\n- **Derniers titres écoutés** (clic = copier le nom).\r\n- **Profils** Normal / Travail / Jeu / Nuit : clic pour appliquer, clic droit pour y enregistrer l'état actuel.\r\n\r\n### Activités en direct\r\n- Une petite **API locale** (`127.0.0.1`, protégée par un jeton) permet à tes scripts d'afficher une progression dans l'île : compilation, rendu, téléchargement…\r\n- **Minuteurs nommés** : tape `15 min thé` dans l'onglet Lancer. Plusieurs peuvent tourner en même temps.\r\n\r\n### Mode appel\r\n- Teams, Zoom, Meet (navigateur), Discord, Skype, Slack, WhatsApp… détectés quand ils prennent le micro.\r\n- Chrono de l'appel dans l'île, notifications en pause pendant l'appel (désactivable).\r\n- **`Ctrl+Alt+M`** coupe ou réactive le micro pour toutes les applis.\r\n\r\n### Presse-papiers\r\n- **Texte d'une capture** : bouton « Texte » après une capture d'écran, ou clic droit sur une image (reconnaissance intégrée à Windows, hors ligne).\r\n- **Recherche** dans l'historique et **épingles** (les textes épinglés sont gardés au redémarrage).\r\n\r\n### Notifications\r\n- Messages d'une même conversation **regroupés** dans une seule carte.\r\n- **Heures calmes** (ex. `23:00-07:00`) et **mots-clés prioritaires** qui passent malgré Ne pas déranger.\r\n- **Rappel plus tard** : bouton horloge sur chaque notification.\r\n\r\n### Média\r\n- **Traduction des paroles** sous chaque ligne (option, désactivée par défaut : elle envoie les paroles à Google Traduction).\r\n- Molette sur l'île compacte = volume, clic molette = lecture / pause.\r\n\r\n### Système et jeu\r\n- **Alertes** : disque presque plein, température élevée, batterie d'un appareil Bluetooth faible.\r\n- En jeu : charge processeur, carte graphique et température à côté des FPS.\r\n\r\n### Onglet Lancer\r\n- Tape le nom d'une appli puis Entrée pour l'ouvrir.\r\n\r\n### Apparence\r\n- L'île peut **suivre l'écran** où se trouve la souris.\r\n- **Couleur d'accent personnalisée**.\r\n\r\n### Projet\r\n- **Canal bêta** dans les réglages : recevoir aussi les pré-versions.\r\n- **Sauvegarde / restauration** des réglages dans un fichier.\r\n- **Jetons chiffrés** (Discord, Spotify, Steam) dans `settings.json` : seul ton compte Windows peut les relire.\r\n\r\n## 🚫 Pas dans cette version\r\n- Répondre à un message depuis l'île : Windows ne le permet pas à une appli comme Malbo.\r\n- Reconnaissance du morceau qui passe (façon Shazam) : demande un service payant.\r\n- Débit réseau par appli : demande les droits administrateur.\r\n- Miniatures en direct des fenêtres, une île par écran, paroles mot par mot, galerie de plugins, recherche de fichiers : reportés.\r\n- Bascule directe du mode nuit et de l'économie d'énergie : Windows n'offre pas de moyen fiable, les boutons ouvrent le bon réglage.\r\n\r\n## ⚠️ À savoir\r\n- Un navigateur qui utilise le micro est compté comme un appel (c'est le cas de Meet).\r\n- Le clip de jeu demande que l'enregistrement en arrière-plan soit activé dans la Xbox Game Bar.\r\n- L'exe n'est pas signé : Windows SmartScreen peut demander une confirmation.\r\n- Les onglets Système et Infos restent denses : à revoir à partir de captures d'écran.\r\n\n---\n**SHA-256 de Malbo.exe** : `AB14328EBE61D68417822F468E9337072E0AAE417845D2B3A566FA8D05BDF9CF`\r\n",
+  "html_url": "https://github.com/MattRvfl/Malbo/releases/tag/v1.3.1",
+  "published_at": "2026-11-10T09:31:49Z",
+  "prerelease": true,
+  "assets": [
+   {
+    "name": "Malbo.exe",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.1/Malbo.exe",
+    "size": 77282796,
+    "download_count": 1
+   },
+   {
+    "name": "update.json",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.1/update.json",
+    "size": 279,
+    "download_count": 1
+   }
+  ]
+ },
+ {
+  "tag_name": "v1.3.0-alpha.2",
+  "name": "Malbo v1.3.0-alpha.2",
+  "body": "# Malbo 1.3 (alpha 2) : refonte de l'interface\r\n\r\n> ⚠️ **Version alpha.** Cette version change beaucoup l'apparence et **n'a pas encore été vue sur un vrai écran** : attends-toi à des défauts d'affichage. Si toutes les icônes apparaissent comme des carrés, envoie `%AppData%\\Malbo\\error.log`.\r\n\r\nContient tout ce qu'apportait l'[alpha 1](https://github.com/MattRvfl/Malbo/releases/tag/v1.3.0-alpha), plus :\r\n\r\n## 🎨 Nouvelles icônes\r\n- Toutes les icônes passent à **[Phosphor Icons](https://phosphoricons.com)** (licence MIT), embarquées dans l'exe : même rendu sur Windows 10 et 11.\r\n- Boutons de lecture pleins, cœur et punaise pleins quand ils sont actifs.\r\n- La météo utilise les mêmes icônes que le reste (plus d'emojis mélangés).\r\n\r\n## 🧭 Onglets\r\n- **5 onglets principaux** dans la barre (Média, Notifs, Outils, Système, Lancer), les autres derrière le bouton **« … »**.\r\n- Ordre et choix réglables : Réglages › Onglets.\r\n- L'ancien onglet « Plus » s'appelle maintenant **Bureau**.\r\n\r\n## 📐 Île qui s'adapte\r\n- La hauteur de l'île ouverte suit le contenu pour les notifications, les fichiers et les plugins, au lieu d'un grand panneau fixe.\r\n- Nouveau réglage **Décalage vers le bas** pour ne plus recouvrir les onglets du navigateur.\r\n\r\n## ⌨️ Clavier et saisie\r\n- L'île **reste ouverte tant que tu tapes** dans un champ.\r\n- `Échap` la referme, `Ctrl+Tab` et `Ctrl+1…9` changent d'onglet, `Tab` parcourt les boutons (avec un anneau de focus visible).\r\n\r\n## 🔎 Plus rien de caché\r\n- Boutons visibles pour épingler un élément du presse-papiers et ouvrir ses actions.\r\n- Carte **Astuces** dans l'onglet Bureau (gestes et raccourcis), et message de bienvenue au premier lancement.\r\n- Infobulles sur les boutons qui n'en avaient pas.\r\n\r\n## ⚙️ Réglages\r\n- Fenêtre découpée en **catégories** avec un menu à gauche et une **recherche**.\r\n- Elle suit le thème clair / sombre de l'île ; les listes déroulantes Windows sont remplacées par des boutons au style de l'app.\r\n\r\n## 👁 Lisibilité\r\n- La couleur d'accent tirée de la pochette est corrigée pour rester **lisible** sur le fond.\r\n- Textes les plus petits agrandis, messages d'état vide raccourcis.\r\n- **File d'aperçus** limitée : 3 en attente au plus, un seul par appli, et ils passent plus vite quand d'autres attendent.\r\n\r\n## 🚧 Pas encore fait\r\n- Les onglets Système et Infos restent denses : je préfère les revoir à partir de captures d'écran.\r\n- Thèmes complets (arrondis, police), miniatures des fenêtres.\r\n\n---\n**SHA-256 de Malbo.exe** : `402EC091B92DF880776550F80E7C1B991610C27B103DA7AB6978AEFA29BB29C2`\r\n",
+  "html_url": "https://github.com/MattRvfl/Malbo/releases/tag/v1.3.0-alpha.2",
+  "published_at": "2026-11-10T09:23:22Z",
+  "prerelease": true,
+  "assets": [
+   {
+    "name": "Malbo.exe",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.0-alpha.2/Malbo.exe",
+    "size": 77282824,
+    "download_count": 1
+   },
+   {
+    "name": "update.json",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.0-alpha.2/update.json",
+    "size": 303,
+    "download_count": 1
+   }
+  ]
+ },
+ {
+  "tag_name": "v1.3.0-alpha",
+  "name": "Malbo v1.3.0-alpha",
+  "body": "# Malbo 1.3 (alpha)\r\n\r\n> ⚠️ **Version alpha.** Tout ce qui suit compile, mais **n'a pas encore été testé sur un vrai PC**. Attends-toi à des bugs, surtout d'affichage. Garde la 1.2 sous la main.\r\n\r\n## ✨ Nouveautés\r\n\r\n### Nouvel onglet « Plus »\r\n- **Fenêtres ouvertes** : la liste des fenêtres, un clic bascule dessus.\r\n- **Sortie audio** : choisir casque ou enceintes sans quitter l'île.\r\n- **Actions rapides** : micro coupé partout, Wi-Fi, Bluetooth, pipette + règle, clip de jeu (Xbox Game Bar), raccourcis vers le mode nuit et l'économie d'énergie.\r\n- **Notes rapides**, enregistrées toutes seules.\r\n- **Derniers titres écoutés** (clic = copier le nom).\r\n- **Profils** Normal / Travail / Jeu / Nuit : clic pour appliquer, clic droit pour y enregistrer l'état actuel.\r\n\r\n### Activités en direct\r\n- Une petite **API locale** (`127.0.0.1`, protégée par un jeton) permet à tes scripts d'afficher une progression dans l'île : compilation, rendu, téléchargement…\r\n- **Minuteurs nommés** : tape `15 min thé` dans l'onglet Lancer. Plusieurs peuvent tourner en même temps.\r\n\r\n### Mode appel\r\n- Teams, Zoom, Meet (navigateur), Discord, Skype, Slack, WhatsApp… détectés quand ils prennent le micro.\r\n- Chrono de l'appel dans l'île, notifications en pause pendant l'appel (désactivable).\r\n- **`Ctrl+Alt+M`** coupe ou réactive le micro pour toutes les applis.\r\n\r\n### Presse-papiers\r\n- **Texte d'une capture** : bouton « Texte » après une capture d'écran, ou clic droit sur une image (reconnaissance intégrée à Windows, hors ligne).\r\n- **Recherche** dans l'historique et **épingles** (les textes épinglés sont gardés au redémarrage).\r\n\r\n### Notifications\r\n- Messages d'une même conversation **regroupés** dans une seule carte.\r\n- **Heures calmes** (ex. `23:00-07:00`) et **mots-clés prioritaires** qui passent malgré Ne pas déranger.\r\n- **Rappel plus tard** : bouton horloge sur chaque notification.\r\n\r\n### Média\r\n- **Traduction des paroles** sous chaque ligne (option, désactivée par défaut : elle envoie les paroles à Google Traduction).\r\n- Molette sur l'île compacte = volume, clic molette = lecture / pause.\r\n\r\n### Système et jeu\r\n- **Alertes** : disque presque plein, température élevée, batterie d'un appareil Bluetooth faible.\r\n- En jeu : charge processeur, carte graphique et température à côté des FPS.\r\n\r\n### Onglet Lancer\r\n- Tape le nom d'une appli puis Entrée pour l'ouvrir.\r\n\r\n### Apparence\r\n- L'île peut **suivre l'écran** où se trouve la souris.\r\n- **Couleur d'accent personnalisée**.\r\n\r\n### Projet\r\n- **Canal bêta** dans les réglages : recevoir aussi les pré-versions.\r\n- **Sauvegarde / restauration** des réglages dans un fichier.\r\n- **Jetons chiffrés** (Discord, Spotify, Steam) dans `settings.json` : seul ton compte Windows peut les relire.\r\n\r\n## 🚫 Pas dans cette alpha\r\n- Répondre à un message depuis l'île : Windows ne le permet pas à une appli comme Malbo.\r\n- Reconnaissance du morceau qui passe (façon Shazam) : demande un service payant.\r\n- Débit réseau par appli : demande les droits administrateur.\r\n- Miniatures en direct des fenêtres, une île par écran, paroles mot par mot, galerie de plugins, recherche de fichiers : reportés.\r\n- Bascule directe du mode nuit et de l'économie d'énergie : Windows n'offre pas de moyen fiable, les boutons ouvrent le bon réglage.\r\n\r\n## ⚠️ À savoir\r\n- Un navigateur qui utilise le micro est compté comme un appel (c'est le cas de Meet).\r\n- Le clip de jeu demande que l'enregistrement en arrière-plan soit activé dans la Xbox Game Bar.\r\n- L'exe n'est pas signé : Windows SmartScreen peut demander une confirmation.\r\n\n---\n**SHA-256 de Malbo.exe** : `9A0D0FC0ADF32450176D10CA0AE5975E12C7232075A12418625F1B58B433A3E5`\r\n",
+  "html_url": "https://github.com/MattRvfl/Malbo/releases/tag/v1.3.0-alpha",
+  "published_at": "2026-11-10T02:34:50Z",
+  "prerelease": true,
+  "assets": [
+   {
+    "name": "Malbo.exe",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.0-alpha/Malbo.exe",
+    "size": 76894941,
+    "download_count": 1
+   },
+   {
+    "name": "update.json",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.3.0-alpha/update.json",
+    "size": 297,
+    "download_count": 1
+   }
+  ]
+ },
+ {
+  "tag_name": "v1.2.0-beta",
+  "name": "Malbo v1.2.0-beta",
+  "body": "# Malbo 1.2 (pré-release beta)\r\n\r\nUne version centrée sur la légèreté, la fiabilité de Discord et les mises à jour automatiques.\r\n\r\n## ✨ Nouveautés\r\n\r\n### Mises à jour automatiques\r\n- Malbo lit le manifeste **`update.json`** du dépôt (version, lien, SHA-256, notes). S'il n'existe pas, il regarde la dernière release GitHub.\r\n- Vérification **au démarrage puis toutes les 6 h**.\r\n- **Installation automatique** quand l'île est au repos (désactivable dans Réglages › Mises à jour).\r\n- Le fichier téléchargé est **vérifié par son empreinte SHA-256** et contrôlé comme un vrai exécutable avant de remplacer l'ancien.\r\n- `\"mandatory\": true` dans le manifeste force une mise à jour importante.\r\n- Dépôt officiel `MattRvfl/Malbo` réglé par défaut.\r\n- `publish.ps1` génère `update.json`, et un workflow GitHub Actions publie les releases automatiquement.\r\n\r\n## 🚀 Moins de RAM\r\n- **Presse-papiers** : les captures sont gardées compressées (PNG) avec une miniature, 8 au maximum. Avant, jusqu'à 30 captures en pleine résolution, soit environ 1 Go en 4K.\r\n- **Audio** : fuites de mémoire corrigées (périphérique audio recréé toutes les 5 s sans être libéré, sessions audio, processus).\r\n- **Volume par appli** : plus de reconstruction des icônes et des sessions toutes les 3 s quand rien ne change, et icônes gardées en cache.\r\n- **Pochettes et icônes** chargées à leur taille d'affichage (une pochette de 1400 px ne pèse plus environ 8 Mo).\r\n- Requête de luminosité réutilisée et libérée correctement.\r\n- Ramasse-miettes .NET réglé pour économiser la mémoire, et RAM rendue à Windows quand l'île est au repos.\r\n- Le processus gardien (le 2ᵉ `Malbo.exe`) libère presque toute sa mémoire.\r\n\r\n## 🎧 Discord : corrections de connexion\r\n- **Corrigé** : si Discord fermait la connexion pendant l'autorisation, Malbo se croyait connecté sans l'être et ne se reconnectait plus jamais.\r\n- **Corrigé** : la demande de jeton envoyée à Discord pouvait recevoir une page web au lieu des données attendues (identifiant de client manquant), ce qui donnait une erreur incompréhensible.\r\n- Client ID et Client Secret vérifiés **avant** la fenêtre d'autorisation dans Discord.\r\n- **Messages d'erreur clairs** en français : Client ID refusé, secret incorrect, redirection manquante, vocal réservé au propriétaire de l'appli et à ses testeurs…\r\n- Jeton refusé : Malbo relance une nouvelle autorisation tout seul.\r\n- Discord fermé détecté tout de suite, au lieu d'environ 4 s perdues toutes les 30 s.\r\n- Les commandes envoyées à Discord ne laissent plus de minuteurs en mémoire.\r\n\r\n## 🛠 Divers\r\n- Sauvegarde des réglages faite d'un coup et protégée (plus de fichier `settings.json` abîmé).\r\n- Barres du visualiseur : moins de calculs d'affichage.\r\n\r\n## ⚠️ À savoir\r\n- Le lecteur vocal Discord exige une appli créée **avec ton propre compte** (ou que tu sois dans *App Testers*). Sinon, Malbo détecte quand même tes appels en local.\r\n- Passage depuis la 1.1 : remplace `Malbo.exe` à la main (`%LocalAppData%\\Programs\\Malbo`). Les mises à jour suivantes seront automatiques.\r\n- L'exe n'est pas signé : Windows SmartScreen peut demander une confirmation.\r\n\n---\n**SHA-256 de Malbo.exe** : `11918CCAA7259DC2029363291987337839C70E30D499B7F528C3D2AEE4134093`\r\n",
+  "html_url": "https://github.com/MattRvfl/Malbo/releases/tag/v1.2.0-beta",
+  "published_at": "2026-11-09T01:34:29Z",
+  "prerelease": true,
+  "assets": [
+   {
+    "name": "Malbo.exe",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.2.0-beta/Malbo.exe",
+    "size": 76862538,
+    "download_count": 1
+   },
+   {
+    "name": "update.json",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/v1.2.0-beta/update.json",
+    "size": 294,
+    "download_count": 1
+   }
+  ]
+ },
+ {
+  "tag_name": "Beta",
+  "name": "Malbo  Release",
+  "body": "**Full Changelog**: https://github.com/MattRvfl/Malbo/commits/Beta",
+  "html_url": "https://github.com/MattRvfl/Malbo/releases/tag/Beta",
+  "published_at": "2026-11-06T05:07:56Z",
+  "prerelease": false,
+  "assets": [
+   {
+    "name": "Malbo.exe",
+    "browser_download_url": "https://github.com/MattRvfl/Malbo/releases/download/Beta/Malbo.exe",
+    "size": 82407976,
+    "download_count": 1
+   }
+  ]
+ }
+]

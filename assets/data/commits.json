@@ -1,0 +1,22 @@
+[
+ {
+  "sha": "2a149777a5069a3ed1a0adae1f0e65c8ac31a310",
+  "html_url": "https://github.com/MattRvfl/Malbo/commit/2a149777a5069a3ed1a0adae1f0e65c8ac31a310",
+  "commit": {
+   "message": "for release",
+   "author": {
+    "date": "2026-11-06T05:04:50Z"
+   }
+  }
+ },
+ {
+  "sha": "c90f2378bbd24473f7e01bc19756016eaa6c85c8",
+  "html_url": "https://github.com/MattRvfl/Malbo/commit/c90f2378bbd24473f7e01bc19756016eaa6c85c8",
+  "commit": {
+   "message": "Malbo 1.1 : Dynamic Island pour Windows",
+   "author": {
+    "date": "2026-11-06T04:58:10Z"
+   }
+  }
+ }
+]

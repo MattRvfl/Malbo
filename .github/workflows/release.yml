@@ -1,7 +1,8 @@
 # Publie une release GitHub quand un tag vX.Y.Z est poussé, ou quand une note de version
 # .github/release-notes/<tag>.md est ajoutée/modifiée sur une branche (le tag est alors créé par la release) :
 # compile Malbo.exe (fichier unique autonome) sur Windows, calcule son SHA-256,
-# joint Malbo.exe + update.json à la release. Un tag avec un tiret (v1.2.0-beta) = pré-release.
+# joint Malbo.exe + update.json à la release. Pré-release si le tag contient un tiret (v1.2.0-beta)
+# ou si la note de version contient la ligne <!-- prerelease -->.
 # Les notes viennent de .github/release-notes/<tag>.md si le fichier existe.
 name: Release
 
@@ -67,6 +68,9 @@ jobs:
           $notes = ".github/release-notes/$tag.md"
           if (-not (Test-Path $notes)) { Set-Content -Path $notes -Value "Malbo $version" -Encoding utf8 }
           Add-Content -Path $notes -Value "`n---`n**SHA-256 de Malbo.exe** : ``$sha``" -Encoding utf8
+          # Pré-release : tag avec un tiret (v1.2.0-beta), ou note de version contenant la ligne <!-- prerelease -->
+          $pre = $tag.Contains('-') -or ((Get-Content $notes -Raw) -match '<!--\s*prerelease\s*-->')
+          "PRERELEASE=$($pre.ToString().ToLower())" >> $env:GITHUB_ENV
           "NOTES=$notes" >> $env:GITHUB_ENV
 
       - uses: softprops/action-gh-release@v2
@@ -75,7 +79,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Malbo ${{ env.TAG }}
           body_path: ${{ env.NOTES }}
-          prerelease: ${{ contains(env.TAG, '-') }}
+          prerelease: ${{ env.PRERELEASE == 'true' }}
           files: |
             publish/Malbo.exe
             publish/update.json

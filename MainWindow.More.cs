@@ -172,7 +172,8 @@ namespace DynamicIsland
             try
             {
                 var fams = Fonts.GetFontFamilies(new Uri("pack://application:,,,/Assets/Fonts/")).Select(f => f.Source).ToList();
-                if (!fams.Any(f => f.Contains("Phosphor-Bold")) || !fams.Any(f => f.Contains("Phosphor-Fill")))
+                // WPF nomme la famille de Phosphor-Bold.ttf « Phosphor » (le suffixe de poids est retiré).
+                if (!fams.Any(f => f.EndsWith("#Phosphor")) || !fams.Any(f => f.EndsWith("#Phosphor-Fill")))
                     App.Log(new InvalidOperationException("Police d'icônes Phosphor introuvable dans les ressources. Familles vues : " + string.Join(", ", fams)));
             }
             catch (Exception ex) { App.Log(ex); }

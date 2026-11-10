@@ -11,10 +11,11 @@
         <SolidColorBrush x:Key="SubFg" Color="#FF8E8E93"/>
         <SolidColorBrush x:Key="Accent" Color="#FF0A84FF"/>
         <!-- Icônes Phosphor (MIT) embarquées : même rendu sur Windows 10 et 11. « Icons » = contour épais, « IconsFill » = pleines. -->
-        <FontFamily x:Key="Icons">/Malbo;component/Assets/Fonts/#Phosphor-Bold</FontFamily>
+        <!-- Attention : WPF retire « -Bold » du nom de famille (c'est un poids), la famille de Phosphor-Bold.ttf s'appelle donc « Phosphor ». -->
+        <FontFamily x:Key="Icons">/Malbo;component/Assets/Fonts/#Phosphor</FontFamily>
         <FontFamily x:Key="IconsFill">/Malbo;component/Assets/Fonts/#Phosphor-Fill</FontFamily>
         <!-- Texte courant pouvant contenir une icône (météo, épingle…) : les caractères d'icône retombent sur Phosphor. -->
-        <FontFamily x:Key="TextIcons">Segoe UI Variable Text, Segoe UI, /Malbo;component/Assets/Fonts/#Phosphor-Bold</FontFamily>
+        <FontFamily x:Key="TextIcons">Segoe UI Variable Text, Segoe UI, /Malbo;component/Assets/Fonts/#Phosphor</FontFamily>
 
         <Style x:Key="H" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
